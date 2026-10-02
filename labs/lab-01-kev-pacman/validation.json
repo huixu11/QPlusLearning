@@ -2,16 +2,17 @@
   "checked_at": "2026-10-02",
   "cpu_tests": {
     "result": "passed",
-    "count": 27,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status"
+    "count": 33,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation"
   },
   "notebook": {
-    "code_cells": 21,
+    "code_cells": 22,
     "pinned_helper_files": 12,
     "syntax": "passed",
     "source_consistency": "passed",
     "bootstrap_with_local_verified_responses": "passed",
-    "cached_bootstrap_and_helper_refresh": "passed"
+    "cached_bootstrap_and_helper_refresh": "passed; preserves existing checkpoint files",
+    "separate_preparation_defaults_to_skip": "passed with mock runtime"
   },
   "slides": {
     "count": 23,
@@ -22,7 +23,7 @@
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "a8c62c8e4f817ad7d200e7e5135153b3dd86e8bcbfb404ba4c98c75afe663b54",
+    "notebooks/pacman_kev_lab.ipynb": "dab3562e72738feb842b5b67344a218137eb9a277617ae014196556ba57d1a83",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
     "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
@@ -68,5 +69,11 @@
       "causal-conv1d": "1.7.0",
       "ninja": "1.13.0"
     }
+  },
+  "training_preparation": {
+    "default": "bindings_only",
+    "cuda_profiler": "removed",
+    "optional_two_record_cuda_check": "not_run",
+    "actual_cuda_training": "not_run"
   }
 }
