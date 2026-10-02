@@ -1,0 +1,127 @@
+{
+  "checked_at": "2026-10-02",
+  "scope": "Delegated review of SGLang decision-model documentation, pull requests and pinned implementation; no runtime benchmark performed",
+  "conclusion": "The merged generic API scores ordinary chat-model vocabulary labels. Native trained decision checkpoints use a separate open PR. Neither demonstrates Kev pointer-head or CLM projection-head support.",
+  "prs": [
+    {
+      "number": 41208,
+      "status": "merged",
+      "merged_at": "2026-09-25T04:59:00Z",
+      "commit": "16d1c93b3d28227a40f0b4c5559f12dedbb64b26",
+      "purpose": "Generic typed decision API and System One adapter",
+      "url": "https://github.com/sgl-project/sglang/pull/41208"
+    },
+    {
+      "number": 40992,
+      "status": "closed without separate merge",
+      "purpose": "Initial generic API; commits included in #41208",
+      "url": "https://github.com/sgl-project/sglang/pull/40992"
+    },
+    {
+      "number": 41712,
+      "status": "open",
+      "purpose": "Native Intern-Decision checkpoints with positional marker readouts",
+      "url": "https://github.com/sgl-project/sglang/pull/41712"
+    },
+    {
+      "number": 41724,
+      "status": "open",
+      "purpose": "Keep positional logprob readouts within a single prefill chunk; prerequisite for #41712",
+      "url": "https://github.com/sgl-project/sglang/pull/41724"
+    },
+    {
+      "number": 41922,
+      "status": "open",
+      "purpose": "Image input for generic decisions",
+      "url": "https://github.com/sgl-project/sglang/pull/41922"
+    }
+  ],
+  "merged_path": {
+    "endpoints": [
+      "POST /v1/decisions",
+      "POST /v1/systemone"
+    ],
+    "validated_checkpoints": [
+      "Qwen/Qwen3.8-27B",
+      "Qwen/Qwen3.5-35B-A3B"
+    ],
+    "validation_hardware": "One H200, BF16; Qwen3.8 checked with and without NEXTN",
+    "pipeline": [
+      "Serialize input; build one chat-template prompt per question",
+      "Disable thinking and validate single-token labels at the exact answer position",
+      "Pass all question sequences to score_prompts / score_request",
+      "Construct a batched GenerateReqInput with selected token logprobs and max_new_tokens=0",
+      "Read last-position vocabulary scores; softmax labels; map to typed answers"
+    ],
+    "readout": "Existing vocabulary projection, without new decision heads",
+    "batching": "One scoring call can schedule several independent question sequences alongside generation; not one jointly answered marker prompt",
+    "cache": "Ordinary Radix token-prefix reuse. No independently encoded and cached action vectors.",
+    "probability": "softmax(label logits / temperature); label_mass measures probability assigned to all offered labels under the full vocabulary",
+    "systemone_adapter": "TypeSafe-compatible wire shape; confidence is a distribution statistic requiring task validation",
+    "training": "No new training recipe or head-training pipeline; uses served chat model",
+    "limitations": [
+      "Request model field cannot select a LoRA adapter",
+      "Tokenizer/template and reasoning-block checks can reject a model",
+      "Merged generic endpoints are text-only",
+      "Decision-specific quantized accuracy/latency was not validated by this review"
+    ]
+  },
+  "native_proposal": {
+    "family": "Intern-Decision only",
+    "checkpoint_paths": [
+      "internlm/Intern-Decision-0.8B",
+      "internlm/Intern-Decision-2B",
+      "internlm/Intern-Decision-4B"
+    ],
+    "two_billion_status": "Unverified in PR evidence",
+    "pipeline": [
+      "Detect tokenizer added token <decision>",
+      "Compile official trained prompt and JSON skeleton with one marker per answer field",
+      "Read answer-symbol vocabulary logits one position before each marker",
+      "Resolve readout positions after multimodal token expansion",
+      "Score all answer fields in one prefill; max_new_tokens=0"
+    ],
+    "readout": "Selected vocabulary symbols at multiple positions, rather than a Kev query/key pointer or CLM state/action projections",
+    "bounds": "Up to 16 questions and 62 symbols per field; positional prompt must fit one prefill chunk",
+    "unsupported": "Speculative decoding and template overrides are refused",
+    "images": "Proposed native multimodal path; small parity checks reported, not production coverage",
+    "usage_convention": "output_tokens equals number of answers despite no generated decoding tokens",
+    "source_commit": "5c1ab3b2789d9f3a69d7ca65f46e88a7879d0b4d"
+  },
+  "cost_and_performance": {
+    "benefit": "Reuse a served chat model without training a new head, and reuse token prefixes through its existing scheduler",
+    "tradeoff": "New joint prompts still incur tokenization and prefill. The documented H200 BF16 checks do not prove free-GPU fit.",
+    "cold_warm_reproducibility": "Hybrid-attention probabilities shifted by up to approximately 0.07 across cache/batch states while checked choices stayed the same; compare matched cache conditions",
+    "generic_parity": "Reported bitwise equality to /v1/score under matched cold-cache state",
+    "native_parity": {
+      "setup": "400 Typed Decision rows, 2000 decisions, one H200 BF16",
+      "0.8B_accuracy_percent": {
+        "sglang": 77.6,
+        "official": 77.35
+      },
+      "4B_accuracy_percent": {
+        "sglang": 80.5,
+        "official": 80.55
+      },
+      "meaning": "Backend parity evidence, not a Kev-versus-CLM benchmark"
+    },
+    "latency": "#41208 reports one approximately 9.5-second trial for 62 questions over a 31k-token state and explicitly disclaims a performance claim",
+    "comparison": "No controlled comparison with Kev, CLM or llama.cpp was supplied",
+    "lab_recommendation": "Optional serving comparison; does not replace frozen-encoder initial head training and Pac-Man fine-tuning"
+  },
+  "llama_cpp_distinction": "Merged #29818 adds model-specific GGUF conversion and pointer/marker/vocabulary readouts for Julia, Laya, Kev, lev and OpenJev. Matching API shape does not imply matching architecture.",
+  "primary_sources": {
+    "docs": "https://lmsysorg.mintlify.app/docs/supported-models/decision_models",
+    "merged_pr": "https://github.com/sgl-project/sglang/pull/41208",
+    "native_pr": "https://github.com/sgl-project/sglang/pull/41712",
+    "scheduling_pr": "https://github.com/sgl-project/sglang/pull/41724",
+    "images_pr": "https://github.com/sgl-project/sglang/pull/41922",
+    "initial_pr": "https://github.com/sgl-project/sglang/pull/40992",
+    "generic_renderer": "https://github.com/sgl-project/sglang/blob/89f21671bb4f1b070e1eb72ed06ebb90882948bf/python/sglang/srt/entrypoints/openai/serving_decisions.py",
+    "score_mixin": "https://github.com/sgl-project/sglang/blob/89f21671bb4f1b070e1eb72ed06ebb90882948bf/python/sglang/srt/managers/tokenizer_manager_score_mixin.py",
+    "native_registry": "https://github.com/sgl-project/sglang/blob/5c1ab3b2789d9f3a69d7ca65f46e88a7879d0b4d/python/sglang/srt/entrypoints/decision/families/__init__.py",
+    "native_compiler": "https://github.com/sgl-project/sglang/blob/5c1ab3b2789d9f3a69d7ca65f46e88a7879d0b4d/python/sglang/srt/entrypoints/decision/families/intern.py",
+    "native_handler": "https://github.com/sgl-project/sglang/blob/5c1ab3b2789d9f3a69d7ca65f46e88a7879d0b4d/python/sglang/srt/entrypoints/decision/serving.py",
+    "llama_cpp_pr": "https://github.com/ggml-org/llama.cpp/pull/29818"
+  }
+}

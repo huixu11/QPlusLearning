@@ -1,0 +1,210 @@
+"""Colab RTX PRO 6000 Blackwell helpers for an interactive Kev notebook.
+
+Setup runs before the 90-minute session. GPU training duration needs a preflight.
+"""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import time
+from urllib.error import URLError
+from urllib.request import urlopen
+
+CODE_REVISION = "84847f0a883d900f7de5b7a57eaa341ca7f9a6b4"
+MODEL_RUN = "jaredpalmer/kev-0.8b@bf75a6a8848ea6960ff2ed108d9ed44c2941174f"
+TARGET_GPU = "RTX PRO 6000 Blackwell"
+BASE_MODEL = "Qwen/Qwen3.5-0.8B-Base"
+BASE_REVISION = "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68"
+TRAINING_SUITE = "evals/v7/decision-v7"
+
+GPU_PREFLIGHT = """
+import json, torch
+if not torch.cuda.is_available():
+    raise RuntimeError('Select a GPU in Runtime > Change runtime type, then reconnect.')
+props = torch.cuda.get_device_properties(0)
+bf16 = torch.cuda.is_bf16_supported()
+# Exercise CUDA kernels and a backward pass in the installed Kev environment.
+dtype = torch.bfloat16 if bf16 else torch.float32
+x = torch.randn(32, 32, device='cuda', dtype=dtype, requires_grad=True)
+(x @ x.T).float().square().mean().backward()
+torch.cuda.synchronize()
+print(json.dumps({'name': props.name, 'memory_gib': props.total_memory / 2**30,
+                  'compute_capability': [props.major, props.minor],
+                  'torch': torch.__version__, 'cuda': torch.version.cuda,
+                  'bf16_supported': bf16, 'kernel_backward': 'passed'}))
+"""
+
+
+def validate_gpu(info, allow_other_gpu=False):
+    """Select precision only after checking the classroom hardware/software contract."""
+    target = TARGET_GPU.lower() in info["name"].lower()
+    if not target and not allow_other_gpu:
+        raise RuntimeError(f"This lab targets {TARGET_GPU}; received {info['name']}. "
+                           "Select the target GPU if available, or use the instructor's validated fallback.")
+    # The pinned PyTorch 2.8 CUDA 12.8 wheel does not support Pascal/P100.
+    if tuple(info["compute_capability"]) < (7, 0):
+        raise RuntimeError("This environment does not support P100/Pascal GPUs. Use the target GPU or a T4 fallback.")
+    if not info["torch"].startswith("2.8.0") or tuple(map(int, info["cuda"].split(".")[:2])) < (12, 8):
+        raise RuntimeError("The lab requires its pinned PyTorch 2.8.0 / CUDA 12.8 environment. Re-run setup.")
+    if info["kernel_backward"] != "passed":
+        raise RuntimeError("CUDA forward/backward preflight did not pass.")
+    if target and not info["bf16_supported"]:
+        raise RuntimeError("The target GPU must support BF16. Check the installed CUDA environment.")
+    return "bf16" if info["bf16_supported"] else "fp32"
+
+
+class CloudRuntime:
+    def __init__(self, workspace, allow_other_gpu=False):
+        self.workspace = Path(workspace).resolve()
+        self.repo = self.workspace / "kev"
+        self.python = self.repo / ".venv" / "bin" / "python"
+        self.process = None
+        self.log = None
+        self.allow_other_gpu = allow_other_gpu
+        self.gpu = None
+        self.dtype = "bf16"
+
+    def setup(self):
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["nvidia-smi"], check=True)
+        if not shutil.which("uv"):
+            subprocess.run([sys.executable, "-m", "pip", "install", "uv"], check=True)
+        if not self.repo.exists():
+            subprocess.run(["git", "clone", "https://github.com/jaredpalmer/kev.git", str(self.repo)], check=True)
+            subprocess.run(["git", "checkout", CODE_REVISION], cwd=self.repo, check=True)
+        actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+        if actual != CODE_REVISION:
+            raise RuntimeError("Existing Kev checkout differs from the lab pin. Use a fresh workspace.")
+        subprocess.run(["uv", "sync", "--frozen", "--no-dev", "--extra", "serve", "--python", "3.13"], cwd=self.repo, check=True)
+        self.gpu = json.loads(subprocess.check_output([str(self.python), "-c", GPU_PREFLIGHT], cwd=self.repo, text=True))
+        self.dtype = validate_gpu(self.gpu, self.allow_other_gpu)
+        (self.workspace / "runtime-preflight.json").write_text(json.dumps(self.gpu, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(self.gpu, indent=2))
+        print(f"Prepared pinned Kev environment using {self.dtype}. Download weights before class.")
+
+    def environment(self):
+        env = dict(os.environ)
+        # BF16 on the target GPU. A validated T4 fallback uses FP32.
+        env.update(KEV_DTYPE=self.dtype, KEV_BACKEND="torch", KEV_FUSED="0", KEV_CUDA_GRAPHS="0", PYTHONUNBUFFERED="1")
+        env.pop("KEV_API_KEY", None)  # this server binds only to notebook-local loopback
+        return env
+
+    def prepare_training(self):
+        """Fetch verified training data/base weights and inspect exactly what can train."""
+        audit_path = self.workspace / "trainable-parameters.json"
+        code = """
+import json, sys
+from kev.suite import load_split
+from kev.model import DecisionModel, load_tokenizer
+rows = load_split(sys.argv[1], 'train')
+tok = load_tokenizer(sys.argv[2], revision=sys.argv[3])
+model = DecisionModel(sys.argv[2], tok, 'cpu', lora=16, revision=sys.argv[3], lora_targets='all')
+trainable = {n:p.numel() for n,p in model.named_parameters() if p.requires_grad}
+assert trainable and any(n.startswith('head.') for n in trainable)
+assert all(n.startswith('head.') or 'lora_A' in n or 'lora_B' in n for n in trainable)
+assert any('lora_A' in n for n in trainable)
+report = {'base':sys.argv[2], 'base_revision':sys.argv[3], 'suite_records':len(rows),
+          'trainable_parameters':trainable, 'original_base_matrices_frozen':True,
+          'effective_encoder_features_fixed':False, 'lora_rank':16, 'lora_alpha':32}
+with open(sys.argv[4], 'w') as out: json.dump(report, out, indent=2)
+print('Prepared', len(rows), 'verified training records and base weights. LoRA/head audit saved.')
+"""
+        subprocess.run([str(self.python), "-c", code, TRAINING_SUITE, BASE_MODEL, BASE_REVISION, str(audit_path)],
+                       cwd=self.repo, env=self.environment(), check=True)
+        return json.loads(audit_path.read_text())
+
+    def pretraining_command(self, output, steps=0):
+        if steps < 0:
+            raise ValueError("steps must be nonnegative; 0 runs the complete two-epoch recipe")
+        recipe = json.loads((self.repo / "experiments/q35-08b.json").read_text())[2]
+        assert recipe["base"] == BASE_MODEL and recipe["base_revision"] == BASE_REVISION
+        if self.dtype != "bf16":
+            raise RuntimeError("The published initial recipe requires a BF16-capable GPU.")
+        command = [str(self.python), "-m", "kev.train", "--suite", TRAINING_SUITE,
+                   "--out", str(Path(output).resolve()), "--device", "cuda",
+                   "--lora", "16", "--lora_targets", "all", "--head_dim", "256",
+                   "--weights_dtype", "fp32"]
+        for key, value in recipe.items():
+            command += ["--" + key, str(value)]
+        if steps:
+            command += ["--max_steps", str(steps)]
+        return command
+
+    def pretrain(self, output, steps=0, timeout_minutes=90):
+        """Published decision-v7 base stage, without --init_from. Full run is prework."""
+        return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial")
+
+    def start(self, run=MODEL_RUN):
+        self.stop()
+        self.log = open(self.workspace / "server.log", "w", encoding="utf-8")
+        self.process = subprocess.Popen([str(self.python), "-m", "kev.serve", "--run", str(run), "--host", "127.0.0.1", "--port", "8009"], cwd=self.repo, env=self.environment(), stdout=self.log, stderr=subprocess.STDOUT)
+        os.environ["KEV_BASE_URL"] = "http://127.0.0.1:8009"
+        os.environ.pop("KEV_API_KEY", None)
+        deadline = time.monotonic() + 900
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                raise RuntimeError("Kev stopped while loading. Inspect server.log in the notebook workspace.")
+            try:
+                with urlopen("http://127.0.0.1:8009/v1/models", timeout=3) as response:
+                    models = json.load(response)
+                (self.workspace / "models.json").write_text(json.dumps(models, indent=2) + "\n", encoding="utf-8")
+                print("Kev ready at notebook-local localhost:8009")
+                return models
+            except (URLError, TimeoutError):
+                time.sleep(3)
+        self.stop()
+        raise TimeoutError("Model startup exceeded 15 minutes. Inspect server.log and connection status.")
+
+    def stop(self):
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        self.process = None
+        if self.log is not None:
+            self.log.close()
+            self.log = None
+
+    def training_command(self, training_data, output, init_from, steps=0, max_state=2048):
+        # Read architecture from the checkpoint rather than guessing compatible flags.
+        code = "import json,sys; from kev.checkpoint import Checkpoint; m=Checkpoint(sys.argv[1]).meta; print(json.dumps({k:getattr(m,k) for k in ['base','base_revision','lora','head_dim','option_isolation','special_embeddings','weights_dtype','weights']}))"
+        meta = json.loads(subprocess.check_output([str(self.python), "-c", code, str(init_from)], cwd=self.repo, env=self.environment(), text=True))
+        if meta["weights"] != "lora":
+            raise RuntimeError("This classroom exercise expects the pinned small LoRA checkpoint.")
+        command = [str(self.python), "-m", "kev.train", "--init_from", str(init_from), "--data", str(Path(training_data).resolve()), "--out", str(Path(output).resolve()), "--base", meta["base"], "--lora", str(meta["lora"]), "--head_dim", str(meta["head_dim"]), "--option_isolation", str(int(meta["option_isolation"])), "--special_embeddings", str(int(meta["special_embeddings"])), "--weights_dtype", meta["weights_dtype"], "--dtype", self.dtype, "--device", "cuda", "--epochs", "2", "--lr", "2e-5", "--batch", "1", "--accum", "8", "--max_steps", str(steps), "--max_state", str(max_state), "--checkpointing", "1", "--p_none", "0", "--p_none_distract", "0", "--p_distract", "0", "--seed", "7"]
+        command[command.index("--max_state") + 1] = str(max_state)
+        command[command.index("--dtype") + 1] = self.dtype
+        # The pinned release targets all modules (including hybrid projections).
+        # warm_start checks that its adapter tensors match the training model.
+        command += ["--lora_targets", "all"]
+        if meta["base_revision"]:
+            command += ["--base_revision", meta["base_revision"]]
+        return command
+
+    def finetune(self, training_data, output, init_from, steps=0):
+        command = self.training_command(training_data, output, init_from, steps)
+        return self._train(command, output, 20, "pacman")
+
+    def _train(self, command, output, timeout_minutes, stage):
+        output = Path(output).resolve()
+        if output.exists():
+            raise RuntimeError("Choose a new checkpoint output directory for each training run.")
+        self.stop()  # release the inference model's GPU allocation before training
+        started = time.perf_counter()
+        try:
+            subprocess.run(command, cwd=self.repo, env=self.environment(), check=True, timeout=timeout_minutes * 60)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Training exceeded the {timeout_minutes}-minute run budget. Keep the log and use the instructor's prepared checkpoint for comparison.") from None
+        evidence = {"stage": stage, "command": command, "elapsed_seconds_including_load_save": time.perf_counter() - started,
+                    "gpu": self.gpu, "code_revision": CODE_REVISION}
+        (output / "run-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        metrics = json.loads((output / "training_metrics.json").read_text())
+        if metrics["optimizer_steps"] < 1:
+            raise RuntimeError("Training completed without a positive optimizer step.")
+        print(f"{stage} training finished in {evidence['elapsed_seconds_including_load_save'] / 60:.1f} minutes")
+        return output

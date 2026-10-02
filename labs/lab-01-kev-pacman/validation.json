@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-10-02",
+  "cpu_tests": {
+    "result": "passed",
+    "count": 6,
+    "scope": "Game transitions and browser/Python parity; split separation; GPU admission and pinned training commands"
+  },
+  "notebook": {
+    "code_cells": 11,
+    "bundled_files": 6,
+    "syntax": "passed",
+    "source_consistency": "passed"
+  },
+  "slides": {
+    "count": 23,
+    "visual_qa": "All native PDF page renders inspected in the authoring workspace; exports copied unchanged"
+  },
+  "gpu_training": "not_run",
+  "live_colab_callback": "not_run",
+  "colab_timing": "not_measured",
+  "sha256": {
+    "notebooks/pacman_kev_lab.ipynb": "e96b1e63ce4222b68e782c892fe5cf8641fb44bf93895aa5b82be6b4d86c0690",
+    "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
+    "slides/pacman-lab.pdf": "eb8ad324e99157c17d1be95ebc4784b432a21482ed732c21ff73ed4b353234fa",
+    "slides/pacman-lab.pptx": "44205add96e7c9a12a6d33f34f11f6c1084c6df4bb6562475ae2e89ad200ab07"
+  }
+}

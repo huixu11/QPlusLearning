@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kev plays Pac-Man</title>
+<meta name="description" content="Train Kev to control Pac-Man. Collect dots and avoid deterministic ghosts in this community browser game adaptation." />
+<style>
+  :root{
+    --bg:#0b0d13; --panel:#12141c; --panel2:#171a24; --border:#242838; --border2:#2f3446;
+    --text:#e9ebf2; --muted:#8b90a6; --accent:#7c8cff; --rose:#ff6b6b; --cyan:#6be0ff;
+    --amber:#edc22e; --lime:#7ff0a8; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;
+    background-image:radial-gradient(1200px 600px at 70% -10%,rgba(124,140,255,.10),transparent);}
+  .wrap{max-width:520px;margin:0 auto;padding:26px 16px 40px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  h1{font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
+  .lede{color:var(--muted);margin:0 0 16px;font-size:14.5px}
+  .live{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;
+    background:rgba(124,140,255,.12);border:1px solid rgba(124,140,255,.4);border-radius:999px;padding:4px 12px;margin-bottom:16px}
+  .set{border:1px solid var(--border);background:var(--panel);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+  .set summary{cursor:pointer;font-size:13.5px;color:var(--muted);list-style:none}
+  .set summary::-webkit-details-marker{display:none}
+  .set summary b{color:var(--text)}
+  .set-body{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .set label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  .set input,.set select{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);
+    border-radius:8px;padding:8px 10px;font:13px var(--mono)}
+  .set .row{display:flex;gap:10px}.set .row>div{flex:1}
+  .set .save{align-self:flex-start;background:var(--accent);color:#0b0d13;border:none;border-radius:8px;
+    padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px}
+  .set .hint{font-size:12px;color:var(--muted)}
+  .btn{border:1px solid var(--border2);background:var(--panel2);color:var(--text);border-radius:9px;
+    padding:9px 15px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn-primary{background:var(--accent);color:#0b0d13;border-color:var(--accent)}
+  .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .status{font-weight:600;font-size:15px}
+  .status.play{color:var(--accent)} .status.win{color:var(--lime)} .status.lose{color:var(--rose)}
+  .meta{font-size:12.5px;color:var(--muted);display:flex;gap:9px;flex-wrap:wrap;font-family:var(--mono)}
+  .meta b{color:var(--text)}
+  .hunt{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:14px}
+  .hunt-head{font-size:12.5px;color:var(--muted);margin-bottom:9px}
+  .hunt-rows{display:flex;flex-direction:column;gap:9px}
+  .hunt-row{display:flex;align-items:center;gap:12px}
+  .hunt-arrow{font-size:22px;line-height:1;width:26px;text-align:center;flex:none}
+  .hunt-arrow.g0{color:var(--rose)} .hunt-arrow.g1{color:var(--cyan)} .hunt-arrow.idle{color:var(--muted);opacity:.5}
+  .hunt-main{flex:1;min-width:0}
+  .hunt-top{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .hunt-top b{color:var(--text)} .hunt-top .fb{color:var(--amber)}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot.g0{background:var(--rose)} .dot.g1{background:var(--cyan)}
+  .hunt-track{height:6px;border-radius:4px;background:var(--border);overflow:hidden}
+  .hunt-fill{height:100%;border-radius:4px;transition:width .25s ease}
+  .hunt-fill.g0{background:linear-gradient(90deg,var(--rose),#ff9f7f)} .hunt-fill.g1{background:linear-gradient(90deg,var(--cyan),#8fb4ff)}
+  .board-wrap{position:relative;max-width:420px;margin:0 auto}
+  #board{display:grid;gap:0;background:var(--bg);border-radius:8px;padding:6px;outline:none}
+  #board:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+  .cell{position:relative;display:flex;align-items:center;justify-content:center}
+  .wall{background:#1b2030;border-radius:3px;box-shadow:inset 0 0 0 1px var(--border2)}
+  .pdot{width:18%;height:18%;border-radius:50%;background:var(--amber);opacity:.85}
+  .pac{width:76%;height:76%;border-radius:50%;background:var(--accent);box-shadow:0 0 9px var(--accent);transition:all 160ms linear}
+  .ghost{width:72%;height:72%;border-radius:50% 50% 28% 28%;transition:all 160ms linear;box-shadow:0 0 7px rgba(0,0,0,.4)}
+  .ghost.g0{background:var(--rose)} .ghost.g1{background:var(--cyan)}
+  .over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:rgba(8,10,16,.85);border-radius:8px;text-align:center;padding:16px}
+  .over b{font-size:19px}.over.win b{color:var(--lime)}.over.lose b{color:var(--rose)}
+  .over span{font-size:13px;color:var(--muted)}
+  .hint{text-align:center;font-size:12.5px;color:var(--muted);margin-top:11px}
+  .hint kbd{font-family:var(--mono);background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11.5px;color:var(--text)}
+  .dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:6px;justify-content:center;margin:12px auto 0}
+  .dpad button{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:9px;font-size:18px;cursor:pointer}
+  .dpad button:active{background:var(--accent);color:#08101c}
+  .dpad .up{grid-area:1/2}.dpad .left{grid-area:2/1}.dpad .right{grid-area:2/3}.dpad .down{grid-area:3/2}
+  .actions{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .err{margin-top:10px;text-align:center;color:var(--amber);font-size:13px}
+  footer{margin-top:28px;text-align:center;font-size:12.5px;color:var(--muted);line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="live">Pac-Man lab — train the player</p>
+  <h1>Kev plays Pac-Man</h1>
+  <p class="lede">Collect dots and avoid the ghosts. Try a turn yourself, then let Kev control Pac-Man. Ghosts follow fixed game code.</p>
+
+  <p><label>Player: <select id="lab-mode"><option value="human">Human — arrow keys / WASD</option><option value="kev">Kev — model decisions</option></select></label></p>
+
+  <div class="bar">
+    <span class="status" id="status">You drive Pac-Man — collect dots and avoid ghosts</span>
+    <span class="meta" id="meta"></span>
+  </div>
+
+  <div class="hunt">
+    <div class="hunt-head">Pac-Man decisions — ghosts follow fixed code</div>
+    <div class="hunt-rows" id="hunt-rows"></div>
+  </div>
+
+  <div class="board-wrap">
+    <div id="board" tabindex="0" role="application" aria-label="Pac-Man board — arrow keys or WASD"></div>
+    <div class="over" id="over" style="display:none"></div>
+  </div>
+
+  <div class="hint">Use <kbd>← ↑ ↓ →</kbd> or <kbd>W A S D</kbd> to steer Pac-Man</div>
+
+  <div class="dpad" aria-hidden="true">
+    <button class="up" data-dir="up">↑</button>
+    <button class="left" data-dir="left">←</button>
+    <button class="right" data-dir="right">→</button>
+    <button class="down" data-dir="down">↓</button>
+  </div>
+
+  <div class="actions" id="actions"></div>
+  <div class="err" id="err" style="display:none"></div>
+
+  <footer>Adapted from <a href="https://github.com/codaaiteam/jev-pacman">codaaiteam/jev-pacman</a> (MIT). The model controls Pac-Man; ghosts use deterministic game code.</footer>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Jev connection — one typed decision per call. Works with a key from
+// jevtypesafeai.com (hosted, browser-ready) or the official TypeSafe API.
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Game
+// ---------------------------------------------------------------------------
+const STEP_MS=600;
+const MAZE = [
+  "#############","#...........#","#.##.###.##.#","#.#.......#.#","#.#.##.##.#.#",
+  "#...#.G.#...#","#.#.#.#.#.#.#","#.#...P...#.#","#.#.#.#.#.#.#","#...#.G.#...#",
+  "#.#.##.##.#.#","#.#.......#.#","#.##.###.##.#","#...........#","#############",
+];
+const ROWS = MAZE.length, COLS = MAZE[0].length;
+const DIRS4 = [{name:"up",dr:-1,dc:0},{name:"down",dr:1,dc:0},{name:"left",dr:0,dc:-1},{name:"right",dr:0,dc:1}];
+const ARROW = {up:"↑",down:"↓",left:"←",right:"→"};
+const OPP = {up:"down",down:"up",left:"right",right:"left"};
+const DIR_BY_NAME = {up:DIRS4[0],down:DIRS4[1],left:DIRS4[2],right:DIRS4[3]};
+const KEY_TO_DIR = {ArrowUp:"up",w:"up",W:"up",ArrowDown:"down",s:"down",S:"down",ArrowLeft:"left",a:"left",A:"left",ArrowRight:"right",d:"right",D:"right"};
+
+const WALLS = MAZE.map(r=>r.split("").map(ch=>ch==="#"));
+let PAC_START={r:7,c:6}; const GHOST_STARTS=[];
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const ch=MAZE[r][c];if(ch==="P")PAC_START={r,c};else if(ch==="G")GHOST_STARTS.push({r,c});}
+const inB=(r,c)=>r>=0&&r<ROWS&&c>=0&&c<COLS;
+const isWall=(r,c)=>!inB(r,c)||WALLS[r][c];
+const kkey=(r,c)=>r+","+c;
+const legalDirs=t=>DIRS4.filter(d=>!isWall(t.r+d.dr,t.c+d.dc));
+function initialDots(){
+  const skip=new Set([kkey(PAC_START.r,PAC_START.c),...GHOST_STARTS.map(g=>kkey(g.r,g.c))]);
+  const dots=new Set(),seen=new Set([kkey(PAC_START.r,PAC_START.c)]);let q=[PAC_START];
+  while(q.length){const nx=[];for(const cur of q)for(const d of DIRS4){const nr=cur.r+d.dr,nc=cur.c+d.dc;if(isWall(nr,nc))continue;const k=kkey(nr,nc);if(seen.has(k))continue;seen.add(k);if(!skip.has(k))dots.add(k);nx.push({r:nr,c:nc});}q=nx;}
+  return dots;
+}
+const TOTAL_DOTS = initialDots().size;
+function greedyToward(from,options,target){
+  if(!options.length)return null;let best=options[0],bd=Infinity;
+  for(const d of options){const nr=from.r+d.dr,nc=from.c+d.dc;const md=Math.abs(nr-target.r)+Math.abs(nc-target.c)+0;if(md<bd){bd=md;best=d;}}
+  return best;
+}
+
+// state
+let pac, dir, desiredDir, ghosts, dots, running, over, decisions, latency, cost, elapsed, ghostInfo, err;
+let turn=0,gameGeneration=0,playerInfo=null,playerBusy=false;
+let startAt, nextAskAt, ghostBusy, started, timer, elapsedTimer;
+function resetState(){
+  turn=0;gameGeneration++;playerInfo=null;playerBusy=false;
+  pac={...PAC_START}; dir=null; desiredDir=null;
+  ghosts=GHOST_STARTS.map(g=>({...g,dir:null}));
+  dots=initialDots(); running=false; over=null; decisions=0; latency=null; cost=0; elapsed=0;
+  ghostInfo=[null,null]; err=null; nextAskAt=0; ghostBusy=false; started=false;
+}
+resetState();
+
+const board=document.getElementById("board");
+board.style.gridTemplateColumns=`repeat(${COLS},1fr)`;
+board.style.gridTemplateRows=`repeat(${ROWS},1fr)`;
+board.style.aspectRatio=`${COLS}/${ROWS}`;
+const cells=[];
+for(let i=0;i<ROWS*COLS;i++){const d=document.createElement("div");board.appendChild(d);cells.push(d);}
+
+function render(){
+  for(let i=0;i<ROWS*COLS;i++){
+    const r=Math.floor(i/COLS),c=i%COLS,wall=WALLS[r][c];
+    const isPac=pac.r===r&&pac.c===c;
+    const gidx=ghosts.findIndex(g=>g.r===r&&g.c===c);
+    const hasDot=dots.has(kkey(r,c));
+    let cls="cell"+(wall?" wall":"");
+    let inner="";
+    if(!wall&&isPac)inner='<div class="pac"></div>';
+    else if(!wall&&gidx>=0)inner='<div class="ghost g'+(gidx%2)+'"></div>';
+    else if(!wall&&hasDot)inner='<div class="pdot"></div>';
+    if(cells[i].className!==cls)cells[i].className=cls;
+    if(cells[i].innerHTML!==inner)cells[i].innerHTML=inner;
+  }
+  const eaten=TOTAL_DOTS-dots.size;
+  const st=over==="win"?"win":over==="caught"?"lose":running?"play":"";
+  const msg=over==="win"?"You win! 🏆 Maze cleared.":over==="caught"?"The ghosts caught Pac-Man 👻":running?"Collect dots and avoid ghosts":(decisions>0||elapsed>0?"Paused":"You drive Pac-Man — collect dots and avoid ghosts");
+  const statusEl=document.getElementById("status");statusEl.textContent=msg;statusEl.className="status"+(st?" "+st:"");
+  document.getElementById("meta").innerHTML=`<span><b>${eaten}</b>/${TOTAL_DOTS} dots</span><span>· <b>${elapsed}</b>s</span><span>· <b>${decisions}</b> model calls</span><span>· <b>${latency!=null?latency:"—"}</b>ms</span>`;
+  document.getElementById("hunt-rows").textContent=playerInfo ? `Pac-Man → ${playerInfo.choice}; probability ${playerInfo.probability.toFixed(2)}` : "Waiting for a player decision";
+  const overEl=document.getElementById("over");
+  if(over){overEl.style.display="flex";overEl.className="over "+(over==="win"?"win":"lose");
+    overEl.innerHTML=`<b>${over==="win"?"You win! 🏆 Maze cleared.":"The ghosts caught Pac-Man 👻"}</b><span>${eaten}/${TOTAL_DOTS} dots · survived ${elapsed}s · ${decisions} model decisions</span>`;
+  } else overEl.style.display="none";
+  const actions=document.getElementById("actions");
+  actions.innerHTML = (!running
+    ? `<button class="btn btn-primary" data-act="start">${over?"▶ Play again":(decisions>0||elapsed>0)?"▶ Resume":"▶ Start"}</button>`
+    : `<button class="btn" data-act="pause">⏸ Pause</button>`) + `<button class="btn" data-act="new">New game</button>`;
+  const e=document.getElementById("err");
+  if(err){e.style.display="block";e.textContent=err;}else e.style.display="none";
+}
+
+function stateText(){
+  let grid="";
+  for(let r=0;r<ROWS;r++){let row="";for(let c=0;c<COLS;c++){
+    if(WALLS[r][c]){row+="#";continue;}
+    if(pac.r===r&&pac.c===c){row+="P";continue;}
+    const gi=ghosts.findIndex(g=>g.r===r&&g.c===c);
+    if(gi===0)row+="1";else if(gi===1)row+="2";else if(dots.has(kkey(r,c)))row+=".";else row+=" ";
+  }grid+=row+"\n";}
+  const heading=dir?dir.name:"still";
+  const gl=ghosts.map((g,i)=>{const dr=pac.r-g.r,dc=pac.c-g.c;const v=dr<0?`${-dr} up`:dr>0?`${dr} down`:"";const h=dc<0?`${-dc} left`:dc>0?`${dc} right`:"";const rel=[v,h].filter(Boolean).join(" and ")||"on the same tile";return `Ghost ${i+1} is at row ${g.r}, column ${g.c}; Pac-Man is ${rel} from it.`;});
+  return `Pac-Man maze, ${COLS} columns x ${ROWS} rows, 0-indexed. Legend: '#'=wall, '.'=dot, 'P'=Pac-Man (the human you are hunting), '1'=ghost 1, '2'=ghost 2, ' '=empty.\n`+grid+`Pac-Man is at row ${pac.r}, column ${pac.c}, heading ${heading}.\n`+gl.join("\n")+"\nYou control the ghosts. Corner and catch Pac-Man before he eats every dot.";
+}
+function ghostDirCriteria(g,d,target){const np={r:g.r+d.dr,c:g.c+d.dc};const md=Math.abs(np.r-target.r)+Math.abs(np.c-target.c);const onPac=np.r===target.r&&np.c===target.c;return `Head ${d.name} to row ${np.r}, column ${np.c} — ${onPac?"lands right on Pac-Man (a catch!)":`then ${md} tiles (Manhattan) from Pac-Man`}.`;}
+
+// Course adaptation: the model controls Pac-Man; ghosts use fixed code.
+function observation(){
+  return {
+    maze: MAZE,
+    player: {row:pac.r,column:pac.c,heading:dir?dir.name:null},
+    ghosts: ghosts.map(g=>({row:g.r,column:g.c,heading:g.dir?g.dir.name:null})),
+    dots: [...dots].map(k=>k.split(',').map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]),
+    turn, ghost_move_every:2,
+    objective:'Collect every dot without being caught. Ghosts are controlled by deterministic game code.'
+  };
+}
+function stepGhosts(){
+  ghosts=ghosts.map(g=>{
+    const legal=legalDirs(g);
+    let move=g.dir&&legal.some(d=>d.name===g.dir.name)?g.dir:null;
+    if(!move){
+      const nonReverse=legal.filter(d=>d.name!==OPP[g.dir&&g.dir.name]);
+      move=greedyToward(g,nonReverse.length?nonReverse:legal,pac);
+    }
+    return {r:g.r+move.dr,c:g.c+move.dc,dir:move};
+  });
+}
+function finish(kind){running=false;over=kind;stopLoop();render();}
+async function tick(){
+  if(!running||playerBusy)return;
+  const generation=gameGeneration;
+  let move=null;
+  const mode=document.getElementById('lab-mode').value;
+  if(mode==='kev'){
+    playerBusy=true;
+    const t=performance.now();
+    try{
+      const result=await google.colab.kernel.invokeFunction('pacman.decide',[observation()],{});
+      if(generation!==gameGeneration)return;
+      const data=result.data['application/json'];
+      const ans=data&&data.answers&&data.answers.move;
+      if(!ans||!legalDirs(pac).some(d=>d.name===ans.choice))throw new Error('The model did not return a legal player move.');
+      move=DIR_BY_NAME[ans.choice];
+      playerInfo={choice:ans.choice,probability:ans.probabilities[ans.choice]};
+      latency=Math.round(performance.now()-t);decisions++;err=null;
+    }catch(e){
+      if(generation!==gameGeneration)return;
+      playerBusy=false;running=false;stopLoop();err=String(e.message||e);render();return;
+    }
+    playerBusy=false;
+  }else{
+    if(desiredDir&&!isWall(pac.r+desiredDir.dr,pac.c+desiredDir.dc))move=desiredDir;
+    else if(dir&&!isWall(pac.r+dir.dr,pac.c+dir.dc))move=dir;
+    if(!move)return;
+    playerInfo=null;
+  }
+  pac={r:pac.r+move.dr,c:pac.c+move.dc};dir=move;turn++;
+  dots.delete(kkey(pac.r,pac.c));
+  if(dots.size===0){finish('win');return;}
+  if(ghosts.some(g=>g.r===pac.r&&g.c===pac.c)){finish('caught');return;}
+  if(turn%2===0)stepGhosts();
+  if(ghosts.some(g=>g.r===pac.r&&g.c===pac.c)){finish('caught');return;}
+  render();
+}
+
+function startLoop(){stopLoop();timer=setInterval(tick,STEP_MS);startAt=performance.now()-elapsed*1000;elapsedTimer=setInterval(()=>{const s=Math.floor((performance.now()-startAt)/1000);if(s!==elapsed){elapsed=s;render();}},250);}
+function stopLoop(){clearInterval(timer);clearInterval(elapsedTimer);}
+function start(){if(over)resetState();err=null;running=true;started=true;startLoop();board.focus();render();}
+function pause(){gameGeneration++;playerBusy=false;running=false;stopLoop();render();}
+function newGame(){stopLoop();resetState();render();}
+
+// input
+window.addEventListener("keydown",e=>{if(!running||over)return;const n=KEY_TO_DIR[e.key];if(!n)return;e.preventDefault();desiredDir=DIR_BY_NAME[n];});
+board.addEventListener("keydown",e=>{if(over)return;const n=KEY_TO_DIR[e.key];if(!n)return;e.preventDefault();desiredDir=DIR_BY_NAME[n];if(!running)start();});
+board.addEventListener("click",()=>{if(!running&&!over)start();});
+document.querySelectorAll(".dpad button").forEach(b=>b.addEventListener("click",()=>{if(over)return;desiredDir=DIR_BY_NAME[b.dataset.dir];if(!running)start();}));
+document.getElementById("actions").addEventListener("click",e=>{const a=e.target.dataset.act;if(a==="start")start();else if(a==="pause")pause();else if(a==="new")newGame();});
+document.getElementById("over").addEventListener("click",()=>{});
+
+render();
+</script>
+</body>
+</html>
+
+<!--
+MIT License
+
+Copyright (c) 2026 codaaiteam
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
