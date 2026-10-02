@@ -3,23 +3,29 @@
   "cpu_tests": {
     "result": "passed",
     "count": 39,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; benchmark warmup exclusion, failed-case handling, production-file preservation and selection guards; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior baseline or benchmark selections, with checkpoint path and resume controls retained"
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training"
   },
   "notebook": {
-    "code_cells": 23,
+    "code_cells": 22,
     "pinned_helper_files": 12,
     "syntax": "passed",
     "source_consistency": "passed",
     "bootstrap_with_local_verified_responses": "passed",
     "cached_bootstrap_and_helper_refresh": "passed; preserves existing checkpoint files",
     "separate_preparation_defaults_to_skip": "passed with mock runtime",
-    "optional_benchmark_controls": "passed with mock runtime; disabled by default; suggestions are printed without applying them",
     "initial_execution": {
       "batch": 4,
       "accum": 2,
       "row_budget": 0,
-      "selection": "explicit in Stage 1 cell before command construction; overrides generic profile and previous benchmark settings",
+      "selection": "explicit in Stage 1 cell before command construction; overrides generic profile and previous execution settings",
       "resume_cell_cpu_check": "passed with actual CloudRuntime command builder and mocked training subprocess"
+    },
+    "initial_resume": {
+      "default": "latest",
+      "explicit_choice": "full recovery snapshot directory path",
+      "missing_checkpoint": "error; no fresh training fallback",
+      "checkpoint_selection_cpu_checks": "passed; chosen step 900 takes precedence over newer step 1000",
+      "timing_trials": "removed from notebook and CloudRuntime"
     }
   },
   "slides": {
@@ -31,7 +37,7 @@
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "997a3a5d5cecfa171c83c93e7d55df0ef73919f1adbd4f84d090acb740594a5a",
+    "notebooks/pacman_kev_lab.ipynb": "30956bb55cabc6cd815273f458061eb36ec211045e3f87f5c85ea0062eb6e510",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
     "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
@@ -83,13 +89,6 @@
     "cuda_profiler": "removed",
     "optional_two_record_cuda_check": "not_run",
     "actual_cuda_training": "not_run"
-  },
-  "initial_throughput_benchmark": {
-    "cuda_trials": "not_run_by_course_author",
-    "steps_per_case": 40,
-    "warmup_steps_excluded": 8,
-    "cases": 4,
-    "execution_change_cuda_continuation": "not_run_by_course_author"
   },
   "learner_reported_4b_initial_progress": {
     "source": "learner console excerpt; not independently inspected on GPU",

@@ -1,5 +1,4 @@
 """Check hardware admission and the published-to-domain checkpoint transition."""
-import ast
 import json
 from pathlib import Path
 import shutil
@@ -7,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION, select_initial_benchmark
+from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION
 from training_stages import specifications
 
 ROOT = Path(__file__).resolve().parent
@@ -18,13 +17,7 @@ class CloudRuntimeTests(unittest.TestCase):
         notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
         source = next(''.join(cell['source']) for cell in notebook['cells']
                       if cell['cell_type'] == 'code' and ''.join(cell['source']).startswith('INITIAL ='))
-        tree = ast.parse(source)
-        for statement in tree.body:
-            if isinstance(statement, ast.Assign) and any(
-                    isinstance(target, ast.Name) and target.id in {'RESUME_INITIAL', 'ALLOW_INITIAL_EXECUTION_CHANGE'}
-                    for target in statement.targets):
-                statement.value = ast.copy_location(ast.Constant(True), statement.value)
-        code = compile(tree, '<notebook initial resume>', 'exec')
+        code = compile(source, '<notebook initial resume>', 'exec')
         for previous in (None, {'batch': 1, 'accum': 8, 'row_budget': 2048},
                          {'batch': 2, 'accum': 4, 'row_budget': 4096}):
             with self.subTest(previous=previous), tempfile.TemporaryDirectory() as folder:
@@ -44,7 +37,7 @@ class CloudRuntimeTests(unittest.TestCase):
                 self.assertEqual(flags['--out'], str(output.resolve()))
                 self.assertEqual(flags['--checkpointing'], '1')
                 self.assertEqual(flags['--lr'], '5e-05')
-                self.assertTrue(train.call_args.kwargs['resume'])
+                self.assertEqual(train.call_args.kwargs['resume_from'], 'latest')
                 self.assertTrue(train.call_args.kwargs['allow_execution_change'])
                 self.assertEqual(runtime.selected_initial_recipe({})['batch'], 4)
                 self.assertEqual(runtime.selected_recipe({})['batch'], 1)
@@ -69,46 +62,56 @@ class CloudRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'restricted'):
                 runtime.pretrain('initial', allow_execution_change=True)
 
-    def test_benchmark_excludes_warmup_keeps_production_files_and_continues_after_failure(self):
-        recipe_file = ROOT / 'vendor/kev/experiments/q35-4b-s23.json'
-        with tempfile.TemporaryDirectory() as folder, patch('cloud_runtime.print'):
-            initial_execution = {'batch': 1, 'accum': 8, 'row_budget': 2048}
-            runtime = CloudRuntime(folder, initial_execution=initial_execution)
-            runtime.gpu = {'memory_gib': 95}
-            runtime.training_preflight = {'result': 'bindings_verified'}
-            (runtime.repo / 'experiments').mkdir(parents=True)
-            shutil.copy2(recipe_file, runtime.repo / 'experiments/q35-4b-s23.json')
-            production = Path(folder) / 'checkpoints' / 'kev-4b-initial'
-            production.mkdir(parents=True)
-            (production / 'marker').write_text('preserve')
-            def trial(command, output, timeout, stage):
-                self.assertEqual(stage, 'benchmark-initial')
-                self.assertNotEqual(output, production)
-                self.assertIn('--max_steps', command)
-                if output.name == 'published-4x2':
-                    raise RuntimeError('simulated OOM')
-                output.mkdir()
-                seconds, peak = {'memory-1x8': (2, 18), 'bounded-2x4': (0.9, 30), 'bounded-4x2': (0.8, 78)}[output.name]
-                (output / 'training_metrics.json').write_text(json.dumps({
-                    'optimizer_steps': 18, 'step_seconds': [99] * 8 + [seconds] * 10, 'peak_device_bytes': peak * 2**30}))
-            with patch.object(runtime, '_train', side_effect=trial) as train:
-                report = runtime.benchmark_initial(steps=18, warmup_steps=8)
-            self.assertEqual(train.call_count, 4)
-            self.assertEqual(report['selected_name'], 'bounded-2x4')
-            self.assertAlmostEqual(report['cases'][0]['mean_step_seconds'], 2)
-            self.assertEqual(report['cases'][-1]['status'], 'failed')
-            self.assertEqual(runtime.initial_execution, initial_execution)
-            self.assertEqual((production / 'marker').read_text(), 'preserve')
-            self.assertEqual(len(list((Path(folder) / 'benchmarks').glob('initial/*/report.json'))), 1)
+    def test_resume_uses_latest_or_exact_selected_snapshot_and_preserves_existing_files(self):
+        for selection in ('latest', 'chosen'):
+            with self.subTest(selection=selection), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder)
+                output = Path(folder).resolve() / 'checkpoints/kev-4b-initial'
+                output.mkdir(parents=True)
+                recovery = Path(str(output) + '-recovery')
+                for step in (900, 1000):
+                    snapshot = recovery / f'step-{step:07d}-fixture'
+                    snapshot.mkdir(parents=True)
+                    (snapshot / 'complete.json').write_text(json.dumps({'step': step, 'steps': 3144}))
+                    (snapshot / 'recovery.pt').write_bytes(b'fixture; no tensor restore in this selection test')
+                (recovery / 'latest.json').write_text(json.dumps({'directory': 'step-0001000-fixture'}))
+                chosen = recovery / 'step-0000900-fixture'
+                requested = 'latest' if selection == 'latest' else chosen
+                runtime.training_preflight = {'result': 'bindings_verified'}
+                (Path(folder) / 'optimized-training-preflight.json').write_text(json.dumps(runtime.training_preflight))
+                command = ['python', '-m', 'kev.train', '--out', str(output)]
+                def training(*args, **kwargs):
+                    (output / 'training_metrics.json').write_text(json.dumps({'optimizer_steps': 3144}))
+                with patch('cloud_runtime.stream_training', side_effect=training) as stream, patch('cloud_runtime.print'):
+                    runtime._train(command, output, 180, 'initial', resume_from=requested, allow_execution_change=True)
+                expected = recovery / ('step-0001000-fixture' if selection == 'latest' else 'step-0000900-fixture')
+                self.assertEqual(stream.call_args.kwargs['env']['LAB_RESUME_FROM'], str(expected))
+                self.assertEqual(stream.call_args.kwargs['env']['LAB_ALLOW_EXECUTION_CHANGE'], '1')
+                evidence = json.loads((output / 'run-evidence.json').read_text())
+                self.assertEqual(evidence['resumed_from'], str(expected))
+                self.assertTrue((chosen / 'recovery.pt').is_file())
+                self.assertEqual(json.loads((recovery / 'latest.json').read_text())['directory'], 'step-0001000-fixture')
 
-    def test_benchmark_selection_requires_baseline_speed_gain_and_memory_headroom(self):
-        baseline = {'name': 'memory-1x8', 'status': 'completed', 'mean_step_seconds': 2, 'peak_memory_gib': 18}
-        faster = {'name': 'candidate', 'status': 'completed', 'mean_step_seconds': 1, 'peak_memory_gib': 60}
-        self.assertIs(select_initial_benchmark([baseline, faster], 95), faster)
-        self.assertIs(select_initial_benchmark([baseline, {**faster, 'mean_step_seconds': 1.95}], 95), baseline)
-        self.assertIs(select_initial_benchmark([baseline, {**faster, 'peak_memory_gib': 80}], 95), baseline)
-        self.assertIsNone(select_initial_benchmark([faster], 95))
-        self.assertIsNone(select_initial_benchmark([{**baseline, 'peak_memory_gib': 90}], 95))
+    def test_requested_missing_incomplete_or_unrelated_snapshot_never_starts_training(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            output = Path(folder).resolve() / 'initial'
+            output.mkdir()
+            recovery = Path(str(output) + '-recovery')
+            incomplete = recovery / 'step-0000900-fixture'
+            incomplete.mkdir(parents=True)
+            unrelated = Path(folder) / 'timing-trial'
+            unrelated.mkdir()
+            (unrelated / 'complete.json').write_text(json.dumps({'step': 900}))
+            with patch('cloud_runtime.stream_training') as stream:
+                for selection in ('latest', incomplete, unrelated):
+                    with self.subTest(selection=selection), self.assertRaises((RuntimeError, ValueError)):
+                        runtime._train([], output, 180, 'initial', resume_from=selection)
+                (incomplete / 'complete.json').write_text(json.dumps({'step': 900}))
+                with self.assertRaisesRegex(ValueError, 'missing recovery.pt'):
+                    runtime._train([], output, 180, 'initial', resume_from=incomplete)
+                stream.assert_not_called()
+            self.assertFalse((output / 'training_metrics.json').exists())
 
     def test_prepare_uses_fast_bindings_by_default_and_training_check_only_on_request(self):
         for full_check in (False, True):
