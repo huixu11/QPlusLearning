@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import statistics
 import subprocess
 import sys
 import time
@@ -26,12 +25,6 @@ BASE_MODEL = "Qwen/Qwen3.5-4B-Base"
 BASE_REVISION = "1001bb4d826a52d1f399e183466143f4da7b741b"
 TRAINING_SUITE = "evals/v7/decision-v7"
 MEMORY_OVERRIDES = {"batch": 1, "accum": 8, "checkpointing": 1, "row_budget": 2048}
-INITIAL_BENCHMARK_CASES = [
-    ("memory-1x8", {"batch": 1, "accum": 8, "row_budget": 2048}),
-    ("bounded-2x4", {"batch": 2, "accum": 4, "row_budget": 4096}),
-    ("bounded-4x2", {"batch": 4, "accum": 2, "row_budget": 8192}),
-    ("published-4x2", {"batch": 4, "accum": 2, "row_budget": 0}),
-]
 
 
 def validate_initial_execution(execution):
@@ -47,18 +40,6 @@ def validate_initial_execution(execution):
         raise ValueError("The initial execution must preserve effective batch 8")
     return dict(execution)
 
-
-def select_initial_benchmark(cases, total_memory_gib):
-    """Require a measured speed gain and headroom; a short trial is not full validation."""
-    successful = [case for case in cases if case["status"] == "completed"]
-    baseline = next((case for case in successful if case["name"] == "memory-1x8"), None)
-    eligible = [case for case in successful if case["peak_memory_gib"] <= 0.8 * total_memory_gib]
-    if baseline is None or not eligible:
-        return None
-    fastest = min(eligible, key=lambda case: case["mean_step_seconds"])
-    if fastest["mean_step_seconds"] > baseline["mean_step_seconds"] * 0.95:
-        return baseline if baseline in eligible else None
-    return fastest
 
 GPU_PREFLIGHT = """
 import importlib.util, json, torch
@@ -231,58 +212,10 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                 command += [flag, str(value)]
         return command
 
-    def pretrain(self, output, steps=0, timeout_minutes=180, resume=False, allow_execution_change=False):
+    def pretrain(self, output, steps=0, timeout_minutes=180, resume=False, allow_execution_change=False, resume_from=None):
         """Published decision-v7 base stage, without --init_from. Full run is prework."""
         return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial", resume=resume,
-                           allow_execution_change=allow_execution_change)
-
-    def benchmark_initial(self, steps=40, warmup_steps=8, timeout_minutes=10):
-        """Fresh, separate short trials. Never consume or overwrite the course checkpoint."""
-        if not isinstance(steps, int) or not isinstance(warmup_steps, int) or warmup_steps < 1 or steps < warmup_steps + 10:
-            raise ValueError("Benchmark needs warmup and at least ten measured optimizer steps")
-        if self.gpu is None:
-            raise RuntimeError("Run setup or preparation first to record the GPU allocation")
-        if self.training_preflight is None or self.training_preflight.get("result") not in {"passed", "bindings_verified"}:
-            raise RuntimeError("Run preparation first to verify the optimized bindings")
-        self.stop()
-        directory = self.workspace / "benchmarks" / "initial" / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
-        directory.mkdir(parents=True)
-        report = {"steps_per_case": steps, "warmup_steps_excluded": warmup_steps, "gpu": self.gpu,
-                  "scope": "Initial decision-v7 stage only; first source groups, fresh weights, capped schedule; "
-                           "benchmark checkpoints are not completed curriculum stages; full-run fit unvalidated",
-                  "cases": [], "selected_execution": None}
-        previous = self.initial_execution
-        try:
-            for name, execution in INITIAL_BENCHMARK_CASES:
-                self.initial_execution = dict(execution)
-                output = directory / name
-                case = {"name": name, "execution": execution, "status": "failed"}
-                print(f"Benchmark {name}: {execution}; {steps} optimizer steps, exclude first {warmup_steps}", flush=True)
-                try:
-                    self._train(self.pretraining_command(output, steps), output, timeout_minutes, "benchmark-initial")
-                    metrics = json.loads((output / "training_metrics.json").read_text())
-                    measured = metrics["step_seconds"][warmup_steps:]
-                    if metrics["optimizer_steps"] != steps or len(measured) != steps - warmup_steps:
-                        raise RuntimeError("Incomplete benchmark metrics")
-                    if any(not isinstance(value, (int, float)) or not 0 < value < float("inf") for value in measured):
-                        raise RuntimeError("Invalid benchmark durations")
-                    case.update(status="completed", mean_step_seconds=statistics.mean(measured),
-                                median_step_seconds=statistics.median(measured),
-                                source_records_per_second=8 / statistics.mean(measured),
-                                peak_memory_gib=metrics["peak_device_bytes"] / 2**30)
-                except Exception as error:
-                    case["error"] = str(error)
-                    print(f"Benchmark {name} failed; keeping logs and trying the next case: {error}", flush=True)
-                report["cases"].append(case)
-                (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-            winner = select_initial_benchmark(report["cases"], self.gpu["memory_gib"])
-            if winner:
-                report.update(selected_execution=winner["execution"], selected_name=winner["name"])
-        finally:
-            self.initial_execution = previous
-            (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-        print("Initial benchmark report: " + str(directory / "report.json"), flush=True)
-        return report
+                           allow_execution_change=allow_execution_change, resume_from=resume_from)
 
     def prepare_intermediate_data(self):
         code = "import sys; sys.path.insert(0, sys.argv[1]); from training_stages import prepare_data; prepare_data(sys.argv[2])"
@@ -370,18 +303,28 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         command = self.training_command(training_data, output, init_from, steps)
         return self._train(command, output, 20, "pacman", resume=resume)
 
-    def _train(self, command, output, timeout_minutes, stage, resume=False, allow_execution_change=False):
+    def _train(self, command, output, timeout_minutes, stage, resume=False, allow_execution_change=False, resume_from=None):
+        resume = resume or resume_from is not None
         if allow_execution_change and (not resume or stage != "initial"):
             raise ValueError("Execution-change continuation is restricted to resuming the initial stage")
         output = Path(output).resolve()
         recovery_root = Path(str(output) + "-recovery")
-        snapshot = latest_snapshot(recovery_root) if resume else None
+        snapshot = latest_snapshot(recovery_root) if resume and resume_from in (None, "latest") else None
+        if resume_from is not None and resume_from != "latest":
+            snapshot = Path(resume_from).resolve()
+            if not snapshot.is_relative_to(recovery_root) or not (snapshot / "complete.json").is_file():
+                raise ValueError("Choose a complete recovery snapshot inside this output's recovery directory.")
         if resume and (snapshot is None or not output.is_dir()):
-            raise RuntimeError("No resumable LoRA snapshot for this output. Older failed runs saved logs/config only; choose a new output.")
+            raise RuntimeError("No resumable LoRA snapshot for this output. Resume requested; training will not start fresh.")
+        if snapshot is not None and not (snapshot / "recovery.pt").is_file():
+            raise ValueError("Selected recovery snapshot is missing recovery.pt; training will not start fresh.")
         if (output.exists() or recovery_root.exists()) and not resume:
             raise RuntimeError("Choose a new checkpoint output directory, or resume=True for a run with recovery snapshots.")
         if resume and (output / "run-evidence.json").exists():
             raise RuntimeError("This checkpoint is already complete; use it as the next stage's input.")
+        if snapshot is not None:
+            receipt = json.loads((snapshot / "complete.json").read_text())
+            print(f"Resuming from optimizer step {receipt['step']}: {snapshot}", flush=True)
         report = self.workspace / "optimized-training-preflight.json"
         if self.training_preflight is None or self.training_preflight.get("result") not in {"passed", "bindings_verified"}:
             raise RuntimeError("Run setup and prepare_training first; pinned optimized bindings are required.")
@@ -414,7 +357,7 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                     "gpu": self.gpu, "code_revision": CODE_REVISION, "observer_command": launch,
                     "training_logs": str(log_dir), "telemetry": "one sample per optimizer step",
                     "training_profile": self.training_profile, "recovery_root": str(recovery_root),
-                    "initial_execution": self.initial_execution if stage in {"initial", "benchmark-initial"} else None,
+                    "initial_execution": self.initial_execution if stage == "initial" else None,
                     "execution_change_allowed": allow_execution_change,
                     "resumed_from": str(snapshot) if snapshot else None,
                     "optimized_training_preflight": self.training_preflight,
