@@ -1,6 +1,7 @@
 """Verified stage data and separate checkpoint backups for the teaching notebook."""
 import hashlib
 import json
+import math
 from pathlib import Path
 import zipfile
 
@@ -22,7 +23,7 @@ def verify_data(path, expected):
 
 
 def assemble_joint(repo, expected):
-    """Rebuild the published concatenation, admitting only the verified train files."""
+    """Rebuild the documented partition order, admitting only verified train files."""
     repo = Path(repo)
     target = repo / expected["data"]
     if target.exists():
@@ -35,7 +36,7 @@ def assemble_joint(repo, expected):
         contents.append(path.read_bytes())
     content = b"".join(contents)
     if hashlib.sha256(content).hexdigest() != expected["sha256"]:
-        raise ValueError("Concatenated joint training file differs from the published round-15 checksum.")
+        raise ValueError("Concatenated training file differs from the course-pinned checksum.")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
     verify_data(target, expected)
@@ -49,13 +50,17 @@ def prepare_data(repo):
     dates = Path(repo) / spec["dates"]["data"]
     verify_data(dates, spec["dates"])
     print("Dates/missing-evidence data verified: 1,425 records", flush=True)
-    joint = Path(repo) / spec["documents_skills"]["data"]
-    if not joint.exists():
-        for part in spec["documents_skills"]["parts"]:
+    documents = spec["documents"]
+    load_split(str(Path(repo) / Path(documents["data"]).parent), "train")
+    verify_data(Path(repo) / documents["data"], documents)
+    print("Documents data verified: 5,219 records", flush=True)
+    skills = spec["skills"]
+    if not (Path(repo) / skills["data"]).exists():
+        for part in skills["parts"]:
             load_split(str(Path(repo) / part["suite"]), "train")
             print(f"Verified training partition: {part['suite']}", flush=True)
-    assemble_joint(repo, spec["documents_skills"])
-    print("Documents/skills joint data verified: 16,539 records", flush=True)
+    assemble_joint(repo, skills)
+    print("Skills/devtools data verified: 11,320 records (course-pinned concatenation)", flush=True)
     return {name: {"records": stage["records"], "replay": stage["replay"], "sha256": stage["sha256"]}
             for name, stage in spec.items()}
 
@@ -85,7 +90,15 @@ def inspect_checkpoint(folder, *, stage, owner, parent=None, recipe=None, data_s
         raise ValueError("Checkpoint configuration differs from the selected published recipe")
     if data_spec and evidence.get("training_data_sha256") != data_spec["sha256"]:
         raise ValueError("Checkpoint was trained on different stage data")
-    if metrics["optimizer_steps"] < 1 or metrics["records_seen"] != metrics["requested_records"]:
+    # Kev's records_seen includes augmentation siblings; requested_records counts
+    # source requests. None minimal pairs make these totals legitimately differ.
+    args = config["args"]
+    epochs = args["epochs"]
+    effective_batch = args["batch"] * args["accum"] * metrics.get("world_size", 1)
+    expected_steps = epochs * math.ceil(metrics["requested_records"] / epochs / effective_batch)
+    if (metrics["optimizer_steps"] != expected_steps or metrics["records_seen"] < metrics["requested_records"]
+            or metrics.get("truncated_records", 0) or metrics.get("rejected_records", 0)
+            or args.get("max_steps", 0)):
         raise ValueError("Complete the full training stage before continuing")
     if parent is None:
         if config["init_source"] is not None:

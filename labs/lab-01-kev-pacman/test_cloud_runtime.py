@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cloud_runtime import CloudRuntime, validate_gpu
+from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION
 from training_stages import specifications
 
 ROOT = Path(__file__).resolve().parent
@@ -21,7 +21,8 @@ class CloudRuntimeTests(unittest.TestCase):
         t4 = {**info, "name": "Tesla T4", "compute_capability": [7, 5], "bf16_supported": False}
         with self.assertRaisesRegex(RuntimeError, "received Tesla T4"):
             validate_gpu(t4)
-        self.assertEqual(validate_gpu(t4, allow_other_gpu=True), "fp32")
+        with self.assertRaisesRegex(RuntimeError, "must support BF16"):
+            validate_gpu(t4, allow_other_gpu=True)
         p100 = {**t4, "name": "Tesla P100", "compute_capability": [6, 0]}
         with self.assertRaisesRegex(RuntimeError, "P100/Pascal"):
             validate_gpu(p100, allow_other_gpu=True)
@@ -31,12 +32,12 @@ class CloudRuntimeTests(unittest.TestCase):
             validate_gpu({**info, "bf16_supported": False})
 
     def test_initial_command_matches_selected_published_experiment(self):
-        recipe_file = ROOT / "vendor/kev/experiments/q35-08b.json"
-        recipe = json.loads(recipe_file.read_text())[2]
+        recipe_file = ROOT / "vendor/kev/experiments/q35-4b-s23.json"
+        recipe = json.loads(recipe_file.read_text())[0]
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder, training_profile="published_reference")
             (runtime.repo / "experiments").mkdir(parents=True)
-            shutil.copy2(recipe_file, runtime.repo / "experiments/q35-08b.json")
+            shutil.copy2(recipe_file, runtime.repo / "experiments/q35-4b-s23.json")
             command = runtime.pretraining_command(Path(folder) / "initial")
             flags = dict(zip(command[3::2], command[4::2]))
             for key, value in recipe.items():
@@ -51,7 +52,7 @@ class CloudRuntimeTests(unittest.TestCase):
                 runtime.pretraining_command("unused")
 
     def test_domain_command_uses_learner_checkpoint_and_legal_action_set(self):
-        meta = {"base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "base-pin", "lora": 16,
+        meta = {"base": BASE_MODEL, "base_revision": BASE_REVISION, "lora": 16,
                 "head_dim": 256, "option_isolation": False, "special_embeddings": False,
                 "weights_dtype": "fp32", "weights": "lora"}
         with tempfile.TemporaryDirectory() as folder:
@@ -72,12 +73,12 @@ class CloudRuntimeTests(unittest.TestCase):
             self.assertEqual(flags[key], "0")
 
     def test_intermediate_stages_keep_replay_and_distinct_parent_checkpoints(self):
-        meta = {"base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "base-pin", "lora": 16,
+        meta = {"base": BASE_MODEL, "base_revision": BASE_REVISION, "lora": 16,
                 "head_dim": 256, "option_isolation": False, "special_embeddings": False,
                 "weights_dtype": "fp32", "weights": "lora"}
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder, training_profile="published_reference")
-            for stage, parent in [("dates", "initial"), ("documents_skills", "dates")]:
+            for stage, parent in [("dates", "initial"), ("documents", "dates"), ("skills", "documents")]:
                 with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
                     command = runtime.intermediate_command(stage, "new-checkpoint", Path(folder) / parent)
                 flags = dict(zip(command[3::2], command[4::2]))
@@ -89,18 +90,18 @@ class CloudRuntimeTests(unittest.TestCase):
                 self.assertEqual(flags["--p_none"], "0.1")
                 self.assertEqual(flags["--max_steps"], "0")
                 if stage == "dates":
-                    self.assertEqual(flags["--checkpointing"], "0")
+                    self.assertEqual(flags["--checkpointing"], "1")
                     self.assertEqual(flags["--max_state"], "384")
 
     def test_memory_profile_preserves_effective_batch_and_curriculum(self):
-        recipe_file = ROOT / "vendor/kev/experiments/q35-08b.json"
-        meta = {"base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "base-pin", "lora": 16,
+        recipe_file = ROOT / "vendor/kev/experiments/q35-4b-s23.json"
+        meta = {"base": BASE_MODEL, "base_revision": BASE_REVISION, "lora": 16,
                 "head_dim": 256, "option_isolation": False, "special_embeddings": False,
                 "weights_dtype": "fp32", "weights": "lora"}
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder)
             (runtime.repo / "experiments").mkdir(parents=True)
-            shutil.copy2(recipe_file, runtime.repo / "experiments/q35-08b.json")
+            shutil.copy2(recipe_file, runtime.repo / "experiments/q35-4b-s23.json")
             commands = [runtime.pretraining_command("initial")]
             with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
                 commands += [runtime.intermediate_command(s, s, "parent") for s in specifications()]
@@ -116,6 +117,14 @@ class CloudRuntimeTests(unittest.TestCase):
             self.assertEqual(initial["--p_none_pair"], "0.25")
             self.assertEqual(runtime.selected_recipe({"lr": 1e-4, "batch": 8})["lr"], 1e-4)
             self.assertEqual(runtime.environment()["PYTORCH_CUDA_ALLOC_CONF"], "expandable_segments:True")
+
+    def test_domain_rejects_incompatible_backbone(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps({
+                    "base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "old"})):
+                with self.assertRaisesRegex(RuntimeError, "0.8B adapters are incompatible"):
+                    runtime.training_command("data.jsonl", "out", "old-parent")
 
     def test_old_failed_run_cannot_be_resumed_without_weights(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -73,7 +73,7 @@ def instrument_trainer(source, filename, with_recovery=False, *, return_tree=Fal
 
     class InsertObserver(ast.NodeTransformer):
         count = 0
-        guards = {"existing": 0, "mkdir": 0, "restore": 0, "batch": 0}
+        guards = {"existing": 0, "mkdir": 0, "restore": 0, "batch": 0, "optimizer": 0}
 
         def visit_If(self, node):
             self.generic_visit(node)
@@ -91,6 +91,10 @@ def instrument_trainer(source, filename, with_recovery=False, *, return_tree=Fal
 
         def visit_Call(self, node):
             self.generic_visit(node)
+            if with_recovery and ast.unparse(node.func) == "torch.optim.AdamW":
+                node.keywords.append(ast.keyword(arg="fused", value=ast.parse(
+                    'dev == "cuda" and os.environ.get("LAB_FUSED_ADAMW") == "1"', mode="eval").body))
+                self.guards["optimizer"] += 1
             if with_recovery and ast.unparse(node.func) == "out_dir.mkdir":
                 keyword = next(k for k in node.keywords if k.arg == "exist_ok")
                 keyword.value = ast.parse("bool(a.resume) or _lab_recovery.resuming", mode="eval").body
@@ -161,7 +165,7 @@ def _stop_process(process):
             process.wait()
 
 
-def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds):
+def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, require_metrics=True):
     """Relay subprocess output in Colab and keep logs even on failure/timeout."""
     directory = Path(log_dir)
     directory.mkdir(parents=True, exist_ok=False)
@@ -246,7 +250,7 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds):
                 if last_batch:
                     print("Last attempted batch: " + json.dumps(last_batch), flush=True)
                 raise subprocess.CalledProcessError(result, command)
-            if rows == 0 and not (resumed and resumed["step"] == resumed["steps"]):
+            if require_metrics and rows == 0 and not (resumed and resumed["step"] == resumed["steps"]):
                 raise RuntimeError(f"No optimizer-step metrics received; inspect {directory / 'stdout.log'}")
             status = "completed"
     except KeyboardInterrupt:
@@ -271,8 +275,13 @@ def main():
     if hashlib.sha256(source).hexdigest() != TRAIN_SHA256:
         raise RuntimeError("Kev trainer differs from the pinned source; refusing to instrument it.")
     module = types.ModuleType("kev.train")
+    recovery = LoRARecovery.from_env()
+    if os.environ.get("LAB_REQUIRE_OPTIMIZED_KERNELS") == "1":
+        from optimized_training import require_optimized_bindings
+        recovery.backend = {**require_optimized_bindings(), "fused_adamw": os.environ.get("LAB_FUSED_ADAMW") == "1"}
+        print("Verified training backend: " + json.dumps(recovery.backend), flush=True)
     module.__dict__.update(__package__="kev", __file__=str(path), _lab_observe=StepObserver(),
-                           _lab_recovery=LoRARecovery.from_env())
+                           _lab_recovery=recovery)
     sys.modules["kev.train"] = module
     exec(instrument_trainer(source.decode("utf-8"), str(path), with_recovery=True), module.__dict__)
     module.main()

@@ -16,12 +16,13 @@ from urllib.request import urlopen
 from training_monitor import stream_training
 from training_stages import checkpoint_fingerprint, specifications
 from lora_recovery import latest_snapshot
+from optimized_training import install_kernels, file_hash
 
 CODE_REVISION = "84847f0a883d900f7de5b7a57eaa341ca7f9a6b4"
-MODEL_RUN = "jaredpalmer/kev-0.8b@bf75a6a8848ea6960ff2ed108d9ed44c2941174f"
+MODEL_RUN = "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
 TARGET_GPU = "RTX PRO 6000 Blackwell"
-BASE_MODEL = "Qwen/Qwen3.5-0.8B-Base"
-BASE_REVISION = "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68"
+BASE_MODEL = "Qwen/Qwen3.5-4B-Base"
+BASE_REVISION = "1001bb4d826a52d1f399e183466143f4da7b741b"
 TRAINING_SUITE = "evals/v7/decision-v7"
 MEMORY_OVERRIDES = {"batch": 1, "accum": 8, "checkpointing": 1, "row_budget": 2048}
 
@@ -40,7 +41,7 @@ print(json.dumps({'name': props.name, 'memory_gib': props.total_memory / 2**30,
                   'compute_capability': [props.major, props.minor],
                   'torch': torch.__version__, 'cuda': torch.version.cuda,
                   'bf16_supported': bf16, 'kernel_backward': 'passed',
-                  'optional_deltanet_packages': {name: importlib.util.find_spec(name) is not None
+                  'optional_packages_before_overlay': {name: importlib.util.find_spec(name) is not None
                                                 for name in ['causal_conv1d', 'fla']}}))
 """
 
@@ -53,14 +54,14 @@ def validate_gpu(info, allow_other_gpu=False):
                            "Select the target GPU if available, or use the instructor's validated fallback.")
     # The pinned PyTorch 2.8 CUDA 12.8 wheel does not support Pascal/P100.
     if tuple(info["compute_capability"]) < (7, 0):
-        raise RuntimeError("This environment does not support P100/Pascal GPUs. Use the target GPU or a T4 fallback.")
+        raise RuntimeError("This environment does not support P100/Pascal GPUs. Use the target GPU or a validated BF16-capable fallback.")
     if not info["torch"].startswith("2.8.0") or tuple(map(int, info["cuda"].split(".")[:2])) < (12, 8):
         raise RuntimeError("The lab requires its pinned PyTorch 2.8.0 / CUDA 12.8 environment. Re-run setup.")
     if info["kernel_backward"] != "passed":
         raise RuntimeError("CUDA forward/backward preflight did not pass.")
-    if target and not info["bf16_supported"]:
-        raise RuntimeError("The target GPU must support BF16. Check the installed CUDA environment.")
-    return "bf16" if info["bf16_supported"] else "fp32"
+    if not info["bf16_supported"]:
+        raise RuntimeError("Optimized training must support BF16. Check the installed CUDA environment.")
+    return "bf16"
 
 
 class CloudRuntime:
@@ -76,6 +77,7 @@ class CloudRuntime:
         self.gpu = None
         self.dtype = "bf16"
         self.training_profile = training_profile
+        self.training_preflight = None
 
     def selected_recipe(self, recipe):
         return {**recipe, **(MEMORY_OVERRIDES if self.training_profile == "memory_safe" else {})}
@@ -104,14 +106,16 @@ class CloudRuntime:
         subprocess.run(["uv", "sync", "--frozen", "--no-dev", "--extra", "serve", "--python", "3.13"], cwd=self.repo, check=True)
         self.gpu = json.loads(subprocess.check_output([str(self.python), "-c", GPU_PREFLIGHT], cwd=self.repo, text=True))
         self.dtype = validate_gpu(self.gpu, self.allow_other_gpu)
+        install_kernels(self.python, self.repo, self.workspace)
         (self.workspace / "runtime-preflight.json").write_text(json.dumps(self.gpu, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(self.gpu, indent=2))
         print(f"Prepared pinned Kev environment using {self.dtype}. Download weights before class.")
 
     def environment(self):
         env = dict(os.environ)
-        # BF16 on the target GPU. A validated T4 fallback uses FP32.
-        env.update(KEV_DTYPE=self.dtype, KEV_BACKEND="torch", KEV_FUSED="0", KEV_CUDA_GRAPHS="0", PYTHONUNBUFFERED="1")
+        # BF16 on the target or another explicitly validated compatible GPU.
+        env.update(KEV_DTYPE=self.dtype, KEV_BACKEND="torch", KEV_FUSED="0", KEV_CUDA_GRAPHS="0", PYTHONUNBUFFERED="1",
+                   USE_HUB_KERNELS="0", LAB_REQUIRE_OPTIMIZED_KERNELS="1", LAB_FUSED_ADAMW="1")
         env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         # Recovery settings belong to one launch, never inherit another run's.
         for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS"):
@@ -122,6 +126,7 @@ class CloudRuntime:
     def prepare_training(self):
         """Fetch verified training data/base weights and inspect exactly what can train."""
         audit_path = self.workspace / "trainable-parameters.json"
+        self.stop()
         code = """
 import json, sys
 from kev.suite import load_split
@@ -141,12 +146,21 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
 """
         subprocess.run([str(self.python), "-c", code, TRAINING_SUITE, BASE_MODEL, BASE_REVISION, str(audit_path)],
                        cwd=self.repo, env=self.environment(), check=True)
+        report = self.workspace / "optimized-training-preflight.json"
+        log_dir = self.workspace / "logs" / "kernel-preflight" / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
+        print("Checking the actual Kev loss/backward path with optimized kernels before long training", flush=True)
+        stream_training([str(self.python), "-u", str(Path(__file__).with_name("optimized_training.py")),
+                         "--base", BASE_MODEL, "--revision", BASE_REVISION,
+                         "--suite", TRAINING_SUITE, "--report", str(report)],
+                        cwd=self.repo, env=self.environment(), log_dir=log_dir,
+                        stage="kernel-preflight", timeout_seconds=1200, require_metrics=False)
+        self.training_preflight = json.loads(report.read_text())
         return json.loads(audit_path.read_text())
 
     def pretraining_command(self, output, steps=0):
         if steps < 0:
             raise ValueError("steps must be nonnegative; 0 runs the complete two-epoch recipe")
-        recipe = json.loads((self.repo / "experiments/q35-08b.json").read_text())[2]
+        recipe = json.loads((self.repo / "experiments/q35-4b-s23.json").read_text())[0]
         assert recipe["base"] == BASE_MODEL and recipe["base_revision"] == BASE_REVISION
         if self.dtype != "bf16":
             raise RuntimeError("The published initial recipe requires a BF16-capable GPU.")
@@ -160,7 +174,7 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             command += ["--max_steps", str(steps)]
         return self._profile(command)
 
-    def pretrain(self, output, steps=0, timeout_minutes=90, resume=False):
+    def pretrain(self, output, steps=0, timeout_minutes=180, resume=False):
         """Published decision-v7 base stage, without --init_from. Full run is prework."""
         return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial", resume=resume)
 
@@ -184,13 +198,13 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         # Restore the generic dates-stage defaults, rather than inheriting the
         # task-specific Pac-Man augmentation/length/checkpointing settings.
         if stage == "dates":
-            for key, value in {"checkpointing": 0, "max_state": 384,
+            for key, value in {"checkpointing": 1, "max_state": 384,
                                "p_none": 0.1, "p_none_distract": 0.12, "p_distract": 0.15}.items():
                 command[command.index("--" + key) + 1] = str(value)
         command += ["--suite", TRAINING_SUITE]
         return self._profile(command)
 
-    def intermediate(self, stage, output, init_from, timeout_minutes=90, resume=False):
+    def intermediate(self, stage, output, init_from, timeout_minutes=180, resume=False):
         command = self.intermediate_command(stage, output, init_from)
         return self._train(command, output, timeout_minutes, stage, resume=resume)
 
@@ -232,6 +246,8 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         # Read architecture from the checkpoint rather than guessing compatible flags.
         code = "import json,sys; from kev.checkpoint import Checkpoint; m=Checkpoint(sys.argv[1]).meta; print(json.dumps({k:getattr(m,k) for k in ['base','base_revision','lora','head_dim','option_isolation','special_embeddings','weights_dtype','weights']}))"
         meta = json.loads(subprocess.check_output([str(self.python), "-c", code, str(init_from)], cwd=self.repo, env=self.environment(), text=True))
+        if meta["base"] != BASE_MODEL or meta["base_revision"] != BASE_REVISION:
+            raise RuntimeError("This Kev-4B lab requires a checkpoint from its pinned 4B backbone. Start fresh; 0.8B adapters are incompatible.")
         if meta["weights"] != "lora":
             raise RuntimeError("This classroom exercise expects the pinned small LoRA checkpoint.")
         command = [str(self.python), "-m", "kev.train", "--init_from", str(init_from), "--data", str(Path(training_data).resolve()), "--out", str(Path(output).resolve()), "--base", meta["base"], "--lora", str(meta["lora"]), "--head_dim", str(meta["head_dim"]), "--option_isolation", str(int(meta["option_isolation"])), "--special_embeddings", str(int(meta["special_embeddings"])), "--weights_dtype", meta["weights_dtype"], "--dtype", self.dtype, "--device", "cuda", "--epochs", "2", "--lr", "2e-5", "--batch", "1", "--accum", "8", "--max_steps", str(steps), "--max_state", str(max_state), "--checkpointing", "1", "--p_none", "0", "--p_none_distract", "0", "--p_distract", "0", "--seed", "7"]
@@ -258,6 +274,9 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             raise RuntimeError("Choose a new checkpoint output directory, or resume=True for a run with recovery snapshots.")
         if resume and (output / "run-evidence.json").exists():
             raise RuntimeError("This checkpoint is already complete; use it as the next stage's input.")
+        report = self.workspace / "optimized-training-preflight.json"
+        if self.training_preflight is None or self.training_preflight.get("result") != "passed":
+            raise RuntimeError("Run setup and prepare_training first; optimized CUDA loss/backward preflight is required.")
         self.stop()  # release the inference model's GPU allocation before training
         started = time.perf_counter()
         log_dir = self.workspace / "logs" / stage / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
@@ -285,7 +304,9 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                     "gpu": self.gpu, "code_revision": CODE_REVISION, "observer_command": launch,
                     "training_logs": str(log_dir), "telemetry": "one sample per optimizer step",
                     "training_profile": self.training_profile, "recovery_root": str(recovery_root),
-                    "resumed_from": str(snapshot) if snapshot else None}
+                    "resumed_from": str(snapshot) if snapshot else None,
+                    "optimized_training_preflight": self.training_preflight,
+                    "optimized_training_preflight_sha256": file_hash(report)}
         if "--init_from" in command:
             evidence["parent_checkpoint_sha256"] = checkpoint_fingerprint(command[command.index("--init_from") + 1])
         if "--data" in command:

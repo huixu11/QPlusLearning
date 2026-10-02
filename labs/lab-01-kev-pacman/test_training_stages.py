@@ -38,11 +38,17 @@ class StageTests(unittest.TestCase):
             (parent / "adapter_model.safetensors").write_bytes(b"adapter")
             child = root / "child"
             child.mkdir()
-            (child / "training_config.json").write_text(json.dumps({"args": {"epochs": 1}, "init_source": {"resolved": "old-runtime-path"}}))
-            (child / "training_metrics.json").write_text(json.dumps({"optimizer_steps": 2, "records_seen": 16,
+            (child / "training_config.json").write_text(json.dumps({"args": {"epochs": 1, "batch": 4, "accum": 2}, "init_source": {"resolved": "old-runtime-path"}}))
+            (child / "training_metrics.json").write_text(json.dumps({"optimizer_steps": 2, "records_seen": 22,
                                                                      "requested_records": 16, "peak_device_bytes": 0}))
             (child / "run-evidence.json").write_text(json.dumps({"stage": "dates", "parent_checkpoint_sha256": checkpoint_fingerprint(parent)}))
             inspect_checkpoint(child, stage="dates", owner="learner", parent=parent, recipe={"epochs": 1})
+            metrics = child / "training_metrics.json"
+            complete = json.loads(metrics.read_text())
+            metrics.write_text(json.dumps({**complete, "optimizer_steps": 1}))
+            with self.assertRaisesRegex(ValueError, "full training stage"):
+                inspect_checkpoint(child, stage="dates", owner="learner", parent=parent)
+            metrics.write_text(json.dumps(complete))
             (parent / "head.pt").write_bytes(b"different parent")
             with self.assertRaisesRegex(ValueError, "parent checkpoint"):
                 inspect_checkpoint(child, stage="dates", owner="learner", parent=parent)

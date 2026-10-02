@@ -58,6 +58,7 @@ class LoRARecovery:
         if every_steps < 1 or every_seconds <= 0:
             raise ValueError("Recovery intervals must be positive")
         self.saved_at = time.monotonic()
+        self.backend = None
 
     @property
     def resuming(self):
@@ -92,7 +93,7 @@ class LoRARecovery:
                     "start_epoch": state["ep"], "start_mb": state["mb"] + 1,
                     "grad_norms": _cpu_copy(state["grad_norms"]), "run": dict(state["run"])}
         saved = {"version": 1, "args": vars(state["a"]).copy(), "steps": state["steps"],
-                 "init_source": state.get("init_source"),
+                 "init_source": state.get("init_source"), "training_backend": self.backend,
                  "suite_sha256": state["suite_hash"], "data_sha256": _hash_file(state["a"].data) if state["a"].data else None,
                  "parameters": weights, "optimizer": _cpu_copy(state["opt"].state_dict()),
                  "scheduler": state["sched"].state_dict(), "position": counters,
@@ -146,6 +147,8 @@ class LoRARecovery:
             raise ValueError("Recovery training data differs")
         if saved["init_source"] != state.get("init_source"):
             raise ValueError("Recovery parent checkpoint differs")
+        if saved["training_backend"] != self.backend:
+            raise ValueError("Recovery training backend differs; keep the same optimized setup")
         trainable = {name: parameter for name, parameter in state["model"].named_parameters() if parameter.requires_grad}
         if set(trainable) != set(saved["parameters"]):
             raise ValueError("Recovery trainable parameters differ")

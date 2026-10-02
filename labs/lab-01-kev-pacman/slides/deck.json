@@ -2,14 +2,16 @@
   "presentation_id": "1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ",
   "url": "https://docs.google.com/presentation/d/1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ/edit",
   "slide_count": 23,
-  "theme": "Kev-0.8B published LoRA + pointer-head base training, then Pac-Man adaptation",
+  "theme": "Kev-4B published LoRA + pointer-head curriculum, then Pac-Man adaptation",
   "duration_minutes": 90,
   "finetuning_minutes": 30,
   "state": "Kev base-training and Pac-Man adaptation notebook prepared; GPU preflight pending",
   "title": "Decision models for Pac-Man \u2014 Kev, CLM and the lab",
-  "revision_id": "iEu7Se0XqTh_Jw",
+  "revision_id": "mMqGSDbze2EP3g",
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
   "synced_at": "2026-10-02",
-  "visual_qa": "All 23 native PDF renders inspected. Subsequent notes-only repair leaves all visual objects identical.",
-  "initial_training_prework": true
+  "visual_qa": "All 23 native PDF page renders inspected after the Kev-4B and five-stage update; zero native output issues.",
+  "initial_training_prework": true,
+  "lab_route": "Initial \u2192 dates/evidence \u2192 documents \u2192 skills/devtools \u2192 Pac-Man",
+  "general_stages_prework": true
 }
