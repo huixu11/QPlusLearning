@@ -127,26 +127,39 @@ def verify_training(base, revision, suite, report):
     losses = []
     began = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
+    def phase(message):
+        print("LAB_PHASE " + json.dumps({"phase": message}), flush=True)
+
     from torch.profiler import profile, ProfilerActivity
     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as trace:
         for index, request in enumerate(requests, 1):
+            record_started = time.perf_counter()
             print(f"CUDA training preflight {index}/2: FLA/conv compilation, loss, backward, fused AdamW", flush=True)
+            phase(f"check {index}/2: encoding record")
             batch = encode_batch(model, tok, args, [request], 0)
             loss_sum = 0
-            for part in row_passes(batch, args.row_budget, args.shared_prefix):
+            for number, part in enumerate(row_passes(batch, args.row_budget, args.shared_prefix), 1):
+                phase(f"check {index}/2, pass {number}: forward/loss; may compile new Triton kernels")
                 loss, _ = batch_loss(model, args, part, "cuda", {}, None, torch.autocast("cuda", dtype=torch.bfloat16))
+                phase(f"check {index}/2, pass {number}: backward; may compile new Triton kernels")
                 loss.backward()
                 loss_sum += float(loss.detach())
+            phase(f"check {index}/2: checking finite LoRA/head gradients")
             names = [name for name, p in model.named_parameters() if p.grad is not None]
             if not any(name.startswith("head.") for name in names) or not any("lora_B" in name for name in names):
                 raise RuntimeError("Preflight did not backpropagate through the LoRA and pointer head")
             if any(not torch.isfinite(p.grad).all() for p in model.trainable_parameters() if p.grad is not None):
                 raise RuntimeError("Non-finite gradients in optimized training preflight")
+            phase(f"check {index}/2: clipping gradients and fused AdamW step")
             torch.nn.utils.clip_grad_norm_(model.trainable_parameters(), 1.0, error_if_nonfinite=True)
             opt.step()
             opt.zero_grad()
+            torch.cuda.synchronize()
             losses.append(loss_sum)
+            phase(f"check {index}/2 completed in {time.perf_counter() - record_started:.1f}s; loss {loss_sum:.4f}")
         torch.cuda.synchronize()
+        phase("both optimizer checks complete; finalizing CUDA profiler")
+    phase("reading profiler operators and writing verification report")
     operators = sorted({event.key for event in trace.key_averages()
                         if "scaled_dot_product" in event.key or "fused_adam" in event.key})
     if not any("fused_adam" in operator for operator in operators):

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from training_monitor import PREFIX, TRAIN_SHA256, StepObserver, instrument_trainer, stream_training
 
@@ -76,6 +77,23 @@ class MonitorTests(unittest.TestCase):
             status = json.loads((directory / "status.json").read_text())
             self.assertEqual(status["status"], "timed_out")
             self.assertLess(status["elapsed_seconds"], 5)
+
+    def test_kernel_preflight_reports_phases_without_false_optimizer_status(self):
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()) as console, \
+                patch("training_monitor.HEARTBEAT_SECONDS", 0):
+            directory = Path(folder) / "preflight"
+            code = "print('LAB_PHASE ' + '{\"phase\":\"both optimizer checks complete; finalizing CUDA profiler\"}', flush=True)"
+            stream_training([sys.executable, "-u", "-c", code], cwd=folder, env=os.environ.copy(),
+                            log_dir=directory, stage="kernel-preflight", timeout_seconds=10, require_metrics=False)
+            output = console.getvalue()
+            self.assertIn("both optimizer checks complete", output)
+            self.assertNotIn("before optimizer step 1", output)
+            self.assertNotIn("no optimizer step yet", output)
+            self.assertIn("min elapsed; both optimizer checks complete", output)
+            status = json.loads((directory / "status.json").read_text())
+            self.assertEqual(status["status"], "completed")
+            self.assertEqual(status["logged_steps"], 0)
+            self.assertEqual(status["last_phase"], "both optimizer checks complete; finalizing CUDA profiler")
 
     def test_batch_diagnostics_and_final_step_resume_survive_stream(self):
         with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):

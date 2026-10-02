@@ -17,6 +17,7 @@ import types
 
 TRAIN_SHA256 = "de0b0971defd79c053d56f8e8b17b0501b2e264e93a66a8d5493f1b1ba839416"
 PREFIX = "LAB_METRIC "
+HEARTBEAT_SECONDS = 15
 
 
 class StepObserver:
@@ -172,7 +173,7 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, requi
     writer = TensorBoardWriter(directory / "tensorboard")
     started = time.monotonic()
     last_heartbeat, latest, rows, process = started, None, 0, None
-    resumed, last_batch = None, None
+    resumed, last_batch, reported_phase = None, None, None
     status = "failed"
     messages = queue.Queue()
 
@@ -183,7 +184,9 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, requi
         finally:
             messages.put(None)
 
-    print(f"[{stage}] Starting. Loading the model/preparing data before optimizer step 1. Logs: {directory}", flush=True)
+    starting = ("Loading the model/preparing data before optimizer step 1" if require_metrics
+                else "Running CUDA training verification")
+    print(f"[{stage}] Starting. {starting}. Logs: {directory}", flush=True)
     try:
         process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True, encoding="utf-8",
@@ -234,10 +237,15 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, requi
                     elif line.startswith("LAB_RESUMED "):
                         resumed = json.loads(line[len("LAB_RESUMED "):])
                         print(f"[{stage}] Resumed at step {resumed['step']}/{resumed['steps']}", flush=True)
+                    elif line.startswith("LAB_PHASE "):
+                        reported_phase = json.loads(line[len("LAB_PHASE "):])["phase"]
+                        print(f"[{stage}] {reported_phase}", flush=True)
                     else:
                         print(line, end="", flush=True)
-                if time.monotonic() - last_heartbeat >= 15:
-                    phase = f"last completed step {latest['step']}/{latest['steps']}" if latest else "loading model/preparing data; no optimizer step yet"
+                if time.monotonic() - last_heartbeat >= HEARTBEAT_SECONDS:
+                    phase = (f"last completed step {latest['step']}/{latest['steps']}" if latest else
+                             reported_phase or ("loading model/preparing data; no optimizer step yet" if require_metrics
+                                                else "CUDA verification running; awaiting phase update"))
                     print(f"[{stage}] {elapsed / 60:.1f} min elapsed; {phase}", flush=True)
                     last_heartbeat = time.monotonic()
             remaining = max(0.01, timeout_seconds - (time.monotonic() - started))
@@ -264,7 +272,8 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, requi
         writer.close()
         (directory / "status.json").write_text(json.dumps({"stage": stage, "status": status,
                                                           "logged_steps": rows, "resumed": resumed,
-                                                          "last_batch": last_batch, "elapsed_seconds": time.monotonic() - started}, indent=2) + "\n")
+                                                          "last_batch": last_batch, "last_phase": reported_phase,
+                                                          "elapsed_seconds": time.monotonic() - started}, indent=2) + "\n")
     return directory
 
 
