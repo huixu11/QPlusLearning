@@ -17,7 +17,7 @@
   "game_repository": "https://github.com/codaaiteam/jev-pacman",
   "game_commit": "8446fe74690cd61909bda91acfadbccb0f02b422",
   "game_license": "MIT",
-  "lab_route": "Kev-0.8B published LoRA + pointer-head base training, then Pac-Man adaptation",
+  "lab_route": "Initial \u2192 dates/missing evidence \u2192 documents/skills \u2192 Pac-Man adaptation",
   "clm_repository": "https://github.com/Contrastive-LM/CLM",
   "clm_commit": "bb42c6c5bf914fd449bed2f6ca65be80602cb1f7",
   "notebook_role": "Main Kev initial-training and fine-tuning lab",
@@ -34,5 +34,8 @@
   "suites_revision": "cc4bac803e73112689ec327ffa481c519cbc7a05",
   "course_repository": "https://github.com/yxc20089/QPlusLearning",
   "lab_path": "labs/lab-01-kev-pacman",
-  "lab_title": "Train a Decision Model to Play Pac-Man"
+  "lab_title": "Train a Decision Model to Play Pac-Man",
+  "general_stages_prework": true,
+  "monitoring": "Per-step TensorBoard, JSONL, CSV and streamed console output",
+  "calibration": "Not fitted; fresh runs do not inherit the release temperature"
 }

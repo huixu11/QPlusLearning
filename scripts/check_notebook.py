@@ -1,5 +1,6 @@
-"""Check notebook syntax and bundled sources without a GPU or model download."""
+"""Check notebook syntax and pinned helper hashes without a GPU or model download."""
 import ast
+import hashlib
 import json
 from pathlib import Path
 
@@ -13,7 +14,8 @@ def main():
     ids = [cell["id"] for cell in notebook["cells"]]
     assert len(ids) == len(set(ids))
     code_cells = 0
-    bundled = None
+    files = None
+    revision = None
     for cell in notebook["cells"]:
         if cell["cell_type"] != "code":
             continue
@@ -22,16 +24,22 @@ def main():
         tree = ast.parse("".join(cell["source"]))
         for statement in tree.body:
             if isinstance(statement, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "BUNDLED_FILES"
+                isinstance(target, ast.Name) and target.id == "FILES"
                 for target in statement.targets
             ):
-                bundled = ast.literal_eval(statement.value)
-    assert bundled, "Missing notebook bundle"
-    for name, content in bundled.items():
-        source = LAB / ("vendor/jev-pacman/" + name.removeprefix("community/")
-                        if name.startswith("community/") else name)
-        assert content == source.read_text(), f"Stale bundled source: {name}"
-    print(f"Checked {code_cells} code cells and {len(bundled)} bundled files.")
+                files = ast.literal_eval(statement.value)
+            if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "COURSE_REVISION"
+                for target in statement.targets
+            ):
+                revision = ast.literal_eval(statement.value)
+    assert files, "Missing notebook source manifest"
+    lock = json.loads((LAB / "notebook-source.json").read_text())
+    assert revision == lock["revision"] and files == lock["files"]
+    assert len(revision) == 40
+    for name, expected in files.items():
+        assert hashlib.sha256((LAB / name).read_bytes()).hexdigest() == expected, f"Stale helper: {name}"
+    print(f"Checked {code_cells} code cells and {len(files)} pinned helper files.")
 
 
 if __name__ == "__main__":

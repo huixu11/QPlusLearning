@@ -9,8 +9,12 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from urllib.error import URLError
 from urllib.request import urlopen
+
+from training_monitor import stream_training
+from training_stages import checkpoint_fingerprint, specifications
 
 CODE_REVISION = "84847f0a883d900f7de5b7a57eaa341ca7f9a6b4"
 MODEL_RUN = "jaredpalmer/kev-0.8b@bf75a6a8848ea6960ff2ed108d9ed44c2941174f"
@@ -136,6 +140,36 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         """Published decision-v7 base stage, without --init_from. Full run is prework."""
         return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial")
 
+    def prepare_intermediate_data(self):
+        code = "import sys; sys.path.insert(0, sys.argv[1]); from training_stages import prepare_data; prepare_data(sys.argv[2])"
+        subprocess.run([str(self.python), "-c", code, str(Path(__file__).parent), str(self.repo)],
+                       cwd=self.repo, env=self.environment(), check=True)
+
+    def intermediate_command(self, stage, output, init_from):
+        if self.dtype != "bf16":
+            raise RuntimeError("Published intermediate stages require a BF16-capable GPU.")
+        spec = specifications()[stage]
+        command = self.training_command(self.repo / spec["data"], output, init_from=init_from)
+        recipe = spec["args"]
+        for key, value in recipe.items():
+            flag = "--" + key
+            if flag in command:
+                command[command.index(flag) + 1] = str(value)
+            else:
+                command += [flag, str(value)]
+        # Restore the generic dates-stage defaults, rather than inheriting the
+        # task-specific Pac-Man augmentation/length/checkpointing settings.
+        if stage == "dates":
+            for key, value in {"checkpointing": 0, "max_state": 384,
+                               "p_none": 0.1, "p_none_distract": 0.12, "p_distract": 0.15}.items():
+                command[command.index("--" + key) + 1] = str(value)
+        command += ["--suite", TRAINING_SUITE]
+        return command
+
+    def intermediate(self, stage, output, init_from, timeout_minutes=90):
+        command = self.intermediate_command(stage, output, init_from)
+        return self._train(command, output, timeout_minutes, stage)
+
     def start(self, run=MODEL_RUN):
         self.stop()
         self.log = open(self.workspace / "server.log", "w", encoding="utf-8")
@@ -196,12 +230,21 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             raise RuntimeError("Choose a new checkpoint output directory for each training run.")
         self.stop()  # release the inference model's GPU allocation before training
         started = time.perf_counter()
-        try:
-            subprocess.run(command, cwd=self.repo, env=self.environment(), check=True, timeout=timeout_minutes * 60)
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Training exceeded the {timeout_minutes}-minute run budget. Keep the log and use the instructor's prepared checkpoint for comparison.") from None
+        log_dir = self.workspace / "logs" / stage / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
+        # The observer executes the pinned upstream trainer in memory. It adds
+        # logging only; Kev's checkout, flags and training calculations stay intact.
+        observer = Path(__file__).with_name("training_monitor.py")
+        launch = [command[0], "-u", str(observer), *command[3:]]
+        stream_training(launch, cwd=self.repo, env=self.environment(), log_dir=log_dir,
+                        stage=stage, timeout_seconds=timeout_minutes * 60)
         evidence = {"stage": stage, "command": command, "elapsed_seconds_including_load_save": time.perf_counter() - started,
-                    "gpu": self.gpu, "code_revision": CODE_REVISION}
+                    "gpu": self.gpu, "code_revision": CODE_REVISION, "observer_command": launch,
+                    "training_logs": str(log_dir), "telemetry": "one sample per optimizer step"}
+        if "--init_from" in command:
+            evidence["parent_checkpoint_sha256"] = checkpoint_fingerprint(command[command.index("--init_from") + 1])
+        if "--data" in command:
+            import hashlib
+            evidence["training_data_sha256"] = hashlib.sha256(Path(command[command.index("--data") + 1]).read_bytes()).hexdigest()
         (output / "run-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
         metrics = json.loads((output / "training_metrics.json").read_text())
         if metrics["optimizer_steps"] < 1:

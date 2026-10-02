@@ -1,0 +1,69 @@
+{
+  "dates": {
+    "records": 1425,
+    "replay": 2000,
+    "data": "evals/night2/dates_unknowable.jsonl",
+    "sha256": "afd8502d162163605ac446439e32c7b9083302dd78a6bfdc5e30075619e98437",
+    "args": {
+      "epochs": 1,
+      "lr": 4e-05,
+      "dtype": "bf16",
+      "p_none_pair": 0.25,
+      "replay": 2000,
+      "seed": 1,
+      "batch": 8,
+      "accum": 1,
+      "checkpointing": 0,
+      "max_state": 384,
+      "p_none": 0.1,
+      "p_none_distract": 0.12,
+      "p_distract": 0.15
+    },
+    "source": "https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/experiments/night2-08b-du.json"
+  },
+  "documents_skills": {
+    "records": 16539,
+    "replay": 6000,
+    "data": "evals/round15/joint/train.jsonl",
+    "sha256": "1bf25e29582c11a33de334c4c3847f7cc5fe8b318ad05c6ad17162de34205950",
+    "args": {
+      "epochs": 1,
+      "lr": 2e-05,
+      "batch": 4,
+      "accum": 2,
+      "dtype": "bf16",
+      "weights_dtype": "fp32",
+      "checkpointing": 1,
+      "max_state": 7552,
+      "replay": 6000,
+      "seed": 1,
+      "p_none": 0.1,
+      "p_none_distract": 0.12,
+      "p_distract": 0.15,
+      "p_none_pair": 0.25,
+      "lora": 16,
+      "head_dim": 256,
+      "lora_targets": "all",
+      "option_isolation": 0,
+      "special_embeddings": 0
+    },
+    "parts": [
+      {
+        "suite": "evals/documents-v1",
+        "records": 5219,
+        "sha256": "2d7e4c4360d642a382d55425d7f34ffa2f46d00ca39a9bae31acaf82b178ee69"
+      },
+      {
+        "suite": "evals/hard-v1",
+        "records": 6000,
+        "sha256": "a08ca9c5ba5d365967876d7d88753cf876624be8553df5af3dca8973e4a1aa4d"
+      },
+      {
+        "suite": "evals/devtools-v1",
+        "records": 5320,
+        "sha256": "587682c145cbbc0c8c990e9d649da7b972853a9eaaef71e9b7b0fa18163b962c"
+      }
+    ],
+    "source": "https://huggingface.co/jaredpalmer/kev-0.8b/blob/bf75a6a8848ea6960ff2ed108d9ed44c2941174f/training_config.json"
+  }
+}

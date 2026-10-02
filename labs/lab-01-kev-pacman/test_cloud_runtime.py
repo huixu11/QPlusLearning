@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from cloud_runtime import CloudRuntime, validate_gpu
+from training_stages import specifications
 
 ROOT = Path(__file__).resolve().parent
 
@@ -69,6 +70,27 @@ class CloudRuntimeTests(unittest.TestCase):
         self.assertEqual(flags["--dtype"], "bf16")
         for key in ["--p_none", "--p_none_distract", "--p_distract"]:
             self.assertEqual(flags[key], "0")
+
+    def test_intermediate_stages_keep_replay_and_distinct_parent_checkpoints(self):
+        meta = {"base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "base-pin", "lora": 16,
+                "head_dim": 256, "option_isolation": False, "special_embeddings": False,
+                "weights_dtype": "fp32", "weights": "lora"}
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            for stage, parent in [("dates", "initial"), ("documents_skills", "dates")]:
+                with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
+                    command = runtime.intermediate_command(stage, "new-checkpoint", Path(folder) / parent)
+                flags = dict(zip(command[3::2], command[4::2]))
+                for key, value in specifications()[stage]["args"].items():
+                    self.assertEqual(flags["--" + key], str(value))
+                self.assertEqual(flags["--init_from"], str(Path(folder) / parent))
+                self.assertEqual(flags["--suite"], "evals/v7/decision-v7")
+                self.assertEqual(flags["--p_none_pair"], "0.25")
+                self.assertEqual(flags["--p_none"], "0.1")
+                self.assertEqual(flags["--max_steps"], "0")
+                if stage == "dates":
+                    self.assertEqual(flags["--checkpointing"], "0")
+                    self.assertEqual(flags["--max_state"], "384")
 
 
 if __name__ == "__main__":
