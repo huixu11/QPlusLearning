@@ -2,26 +2,41 @@
   "checked_at": "2026-10-02",
   "cpu_tests": {
     "result": "passed",
-    "count": 6,
-    "scope": "Game transitions and browser/Python parity; split separation; GPU admission and pinned training commands"
+    "count": 14,
+    "scope": "Game rules, dataset separation, initial/intermediate/domain commands, per-step telemetry, real TensorBoard events, process failure/timeout, checkpoint provenance and safe restore"
   },
   "notebook": {
-    "code_cells": 11,
-    "bundled_files": 6,
+    "code_cells": 17,
+    "pinned_helper_files": 9,
     "syntax": "passed",
-    "source_consistency": "passed"
+    "source_consistency": "passed",
+    "bootstrap_with_local_verified_responses": "passed"
   },
   "slides": {
     "count": 23,
-    "visual_qa": "All native PDF page renders inspected in the authoring workspace; exports copied unchanged"
+    "visual_qa": "All native PDF page renders inspected in the authoring workspace; exports copied unchanged",
+    "note": "Exports predate intermediate-stage notebook expansion; architecture comparison retained"
   },
   "gpu_training": "not_run",
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "e96b1e63ce4222b68e782c892fe5cf8641fb44bf93895aa5b82be6b4d86c0690",
+    "notebooks/pacman_kev_lab.ipynb": "aea5a1f32aafe4c2cc0b2c32cd409f3a8ca509441a4941371c11e7a4475ac86e",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "eb8ad324e99157c17d1be95ebc4784b432a21482ed732c21ff73ed4b353234fa",
     "slides/pacman-lab.pptx": "44205add96e7c9a12a6d33f34f11f6c1084c6df4bb6562475ae2e89ad200ab07"
-  }
+  },
+  "training_data": {
+    "dates": {
+      "records": 1425,
+      "sha256": "afd8502d162163605ac446439e32c7b9083302dd78a6bfdc5e30075619e98437",
+      "actual_file_verified": true
+    },
+    "documents_skills": {
+      "records": 16539,
+      "sha256": "1bf25e29582c11a33de334c4c3847f7cc5fe8b318ad05c6ad17162de34205950",
+      "actual_published_parts_reproduced": true
+    }
+  },
+  "colab_tensorboard_live_ui": "not_run"
 }

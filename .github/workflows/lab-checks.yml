@@ -13,9 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install CPU test dependencies
-        run: python3 -m pip install -r labs/lab-01-kev-pacman/test-requirements.txt
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r labs/lab-01-kev-pacman/test-requirements.txt
       - name: Check game rules and training commands
-        run: python3 -m unittest discover -s labs/lab-01-kev-pacman -p 'test_*.py'
+        run: .venv/bin/python -m unittest discover -s labs/lab-01-kev-pacman -p 'test_*.py'
       - name: Rebuild teaching artifacts
         run: python3 labs/lab-01-kev-pacman/build_artifacts.py
       - name: Check notebook syntax and bundled sources
