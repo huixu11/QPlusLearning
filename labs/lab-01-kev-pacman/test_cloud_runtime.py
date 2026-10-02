@@ -13,6 +13,47 @@ ROOT = Path(__file__).resolve().parent
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def test_prepare_uses_fast_bindings_by_default_and_training_check_only_on_request(self):
+        for full_check in (False, True):
+            with self.subTest(full_check=full_check), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder)
+                def audit(command, **kwargs):
+                    Path(command[-1]).write_text(json.dumps({"suite_records": 12576}))
+                def check(command, **kwargs):
+                    report = Path(command[command.index("--report") + 1])
+                    result = "bindings_verified" if "--bindings_only" in command else "passed"
+                    report.write_text(json.dumps({"result": result}))
+                with patch("cloud_runtime.subprocess.run", side_effect=audit), \
+                        patch("cloud_runtime.stream_training", side_effect=check) as stream:
+                    if full_check:
+                        result = runtime.prepare_training(run_training_preflight=True)
+                    else:
+                        result = runtime.prepare_training()
+                command = stream.call_args.args[0]
+                self.assertEqual("--bindings_only" in command, not full_check)
+                self.assertEqual(stream.call_args.kwargs["timeout_seconds"], 1200 if full_check else 120)
+                self.assertFalse(stream.call_args.kwargs["require_metrics"])
+                self.assertEqual(result["suite_records"], 12576)
+                self.assertEqual(runtime.training_preflight["result"], "passed" if full_check else "bindings_verified")
+
+    def test_real_training_accepts_verified_bindings_and_records_unrun_separate_check(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            output = Path(folder) / "initial"
+            command = ["python", "-m", "kev.train", "--out", str(output)]
+            with self.assertRaisesRegex(RuntimeError, "optimized bindings are required"):
+                runtime._train(command, output, 90, "initial")
+            runtime.training_preflight = {"result": "bindings_verified", "cuda_loss_backward": "not_run", "optimizer_steps": 0}
+            (Path(folder) / "optimized-training-preflight.json").write_text(json.dumps(runtime.training_preflight))
+            def train(*args, **kwargs):
+                output.mkdir()
+                (output / "training_metrics.json").write_text(json.dumps({"optimizer_steps": 1}))
+            with patch("cloud_runtime.stream_training", side_effect=train):
+                runtime._train(command, output, 90, "initial")
+            evidence = json.loads((output / "run-evidence.json").read_text())
+            self.assertEqual(evidence["optimized_training_preflight"]["cuda_loss_backward"], "not_run")
+            self.assertEqual(evidence["optimized_training_preflight"]["optimizer_steps"], 0)
+
     def test_hardware_contract_and_explicit_fallback(self):
         info = {"name": "NVIDIA RTX PRO 6000 Blackwell Server Edition", "memory_gib": 96,
                 "compute_capability": [12, 0], "torch": "2.8.0+cu128", "cuda": "12.8",

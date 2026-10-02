@@ -123,10 +123,17 @@ class CloudRuntime:
         env.pop("KEV_API_KEY", None)  # this server binds only to notebook-local loopback
         return env
 
-    def prepare_training(self):
+    def prepare_training(self, run_training_preflight=False):
         """Fetch verified training data/base weights and inspect exactly what can train."""
+        self.training_preflight = None
         audit_path = self.workspace / "trainable-parameters.json"
         self.stop()
+        # A helper refresh in the same connected runtime need not reinstall the
+        # environment. Keep the GPU receipt from its completed setup.
+        gpu_receipt = self.workspace / "runtime-preflight.json"
+        if self.gpu is None and gpu_receipt.is_file():
+            self.gpu = json.loads(gpu_receipt.read_text())
+            self.dtype = validate_gpu(self.gpu, self.allow_other_gpu)
         code = """
 import json, sys
 from kev.suite import load_split
@@ -148,12 +155,17 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                        cwd=self.repo, env=self.environment(), check=True)
         report = self.workspace / "optimized-training-preflight.json"
         log_dir = self.workspace / "logs" / "kernel-preflight" / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
-        print("Checking the actual Kev loss/backward path with optimized kernels before long training", flush=True)
-        stream_training([str(self.python), "-u", str(Path(__file__).with_name("optimized_training.py")),
-                         "--base", BASE_MODEL, "--revision", BASE_REVISION,
-                         "--suite", TRAINING_SUITE, "--report", str(report)],
+        command = [str(self.python), "-u", str(Path(__file__).with_name("optimized_training.py")),
+                   "--base", BASE_MODEL, "--revision", BASE_REVISION,
+                   "--suite", TRAINING_SUITE, "--report", str(report)]
+        if run_training_preflight:
+            print("Running optional two-record Kev loss/backward check (no CUDA profiler)", flush=True)
+        else:
+            command.append("--bindings_only")
+            print("Checking optimized bindings; skipping separate two-record training preflight", flush=True)
+        stream_training(command,
                         cwd=self.repo, env=self.environment(), log_dir=log_dir,
-                        stage="kernel-preflight", timeout_seconds=1200, require_metrics=False)
+                        stage="kernel-preflight", timeout_seconds=1200 if run_training_preflight else 120, require_metrics=False)
         self.training_preflight = json.loads(report.read_text())
         return json.loads(audit_path.read_text())
 
@@ -275,8 +287,8 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         if resume and (output / "run-evidence.json").exists():
             raise RuntimeError("This checkpoint is already complete; use it as the next stage's input.")
         report = self.workspace / "optimized-training-preflight.json"
-        if self.training_preflight is None or self.training_preflight.get("result") != "passed":
-            raise RuntimeError("Run setup and prepare_training first; optimized CUDA loss/backward preflight is required.")
+        if self.training_preflight is None or self.training_preflight.get("result") not in {"passed", "bindings_verified"}:
+            raise RuntimeError("Run setup and prepare_training first; pinned optimized bindings are required.")
         self.stop()  # release the inference model's GPU allocation before training
         started = time.perf_counter()
         log_dir = self.workspace / "logs" / stage / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])

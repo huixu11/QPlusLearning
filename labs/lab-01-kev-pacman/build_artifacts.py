@@ -122,19 +122,24 @@ if SHOW_TENSORBOARD:
     else:
         print('Outside a notebook, run: tensorboard --logdir', LOG_DIR)
 """)
-    code("""runtime.setup()
-audit = runtime.prepare_training()
-print('Training suite records:', audit['suite_records'])
-print('Trainable parameters:', sum(audit['trainable_parameters'].values()))
-print('Optimized training verification:', json.dumps(runtime.training_preflight, indent=2))
-""")
+    code("runtime.setup()")
     md("""## Required optimized training stack
 
 Setup extends Kev's frozen environment with hash-pinned wheels: **Flash Linear Attention / fla-core 0.5.2**, **causal-conv1d 1.7.0** (Python 3.13, Torch 2.8, CUDA 12, Linux x86_64, CXX11 ABI), einops 0.8.1 and Ninja 1.13.0. Torch 2.8.0 / CUDA 12.8, Triton 3.4.0, Transformers 5.17 and PEFT remain at Kev's locked versions. Dependencies are installed without replacing that stack. SDPA handles full attention; FLA's Triton kernels handle DeltaNet; the CUDA convolution handles its short convolution. Training uses fused AdamW, BF16 autocast, gradient checkpointing, gradient accumulation and bounded row passes. The LoRA/head recipe and curriculum remain in Kev's trainer.
 
-Before any long run, a separate process loads the actual pinned base/adapter/head and performs Kev loss, backward and fused AdamW on two verified decision-v7 records. It checks finite adapter/head gradients, records selected function bindings and profiled optimizer/SDPA operators, and writes `optimized-training-preflight.json`. Imports or reference-kernel fallback **fail setup**; each training subprocess verifies bindings again. The notebook reports encoding, forward, backward, gradient checks, completed optimizer checks and profiler finalization separately, with 15-second heartbeats and a 20-minute preflight cap. This cap is a timeout, not an expected duration. Two records are a compatibility test, not proof that the full curriculum fits VRAM or meets a timing target. This CUDA test must pass on your allocation; it has not been run by the course author.
+Preparation audits the actual pinned base/LoRA/head on CPU and verifies the selected optimized function bindings and CUDA/BF16 availability. It does **not** run a separate model forward/backward by default. `optimized-training-preflight.json` records `bindings_verified`, zero optimizer steps and `cuda_loss_backward='not_run'`. Every training subprocess verifies bindings again and refuses reference-kernel fallback. The first real training step exercises loss/backward/fused AdamW and saves a recovery snapshot after successful completion.
+
+Set `RUN_TRAINING_PREFLIGHT=True` below only when you want the additional two-record compatibility check. This loads the actual model on CUDA, checks finite adapter/head gradients and counts FLA, convolution and fused AdamW calls without running a CUDA profiler. It reports encoding, forward, backward, gradient checks and completed optimizer updates separately. Both this optional check and real training print Python stacks after 60 seconds without progress; logs retain the active call. Fifteen-second heartbeats show process liveness. The binding-only attempt has a two-minute timeout; the optional training check has a 20-minute timeout. These are limits, not expected durations. Initial kernel compilation/autotuning can still happen during the first real training step. Full-curriculum CUDA compatibility, VRAM and timing remain unvalidated by the course author.
+
+To retry after a stalled old preflight, interrupt its cell and keep the Colab runtime connected. Copy the updated bootstrap cell into your notebook and run it to refresh the verified helpers; existing downloads, checkpoints and logs stay in place. With the existing environment already installed, run the preparation cell below with the default `False`. Installation and model verification now have separate cells.
 
 Fused optimizer/kernel arithmetic can differ numerically from the reference implementation. The published-reference profile retains upstream training flags; both profiles now require optimized kernels. Optional inference fusion and serving CUDA graphs remain disabled for training because they do not implement this backward path. [FLA release](https://github.com/fla-org/flash-linear-attention/releases/tag/v0.5.2), [causal-conv1d release](https://github.com/Dao-AILab/causal-conv1d/releases/tag/v1.7.0).""")
+    code("""RUN_TRAINING_PREFLIGHT = False  # Optional extra model checks; optimized bindings remain required
+audit = runtime.prepare_training(run_training_preflight=RUN_TRAINING_PREFLIGHT)
+print('Training suite records:', audit['suite_records'])
+print('Trainable parameters:', sum(audit['trainable_parameters'].values()))
+print('Optimized training verification:', json.dumps(runtime.training_preflight, indent=2))
+""")
     md("""## Memory profile and recovery storage
 
 A learner's original **0.8B** batch-8 run failed at step 2,073/3,144 with 89.90 GiB actively allocated on a 94.97 GiB GPU. Startup warnings confirmed `causal_conv1d` and `flash-linear-attention` were missing, so Qwen used reference PyTorch kernels with substantial training intermediates. The peak reached 91.91 GiB by step 280 and then stayed flat through step 2,070; that cumulative maximum alone cannot diagnose a leak. [Qwen kernel documentation](https://huggingface.co/docs/transformers/en/model_doc/qwen3_5#usage-tips-and-notes). Record counts are not physical batch sizes: records can contain multiple question rows and none-pair siblings.

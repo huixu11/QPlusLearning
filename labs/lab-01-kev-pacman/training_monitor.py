@@ -21,10 +21,13 @@ HEARTBEAT_SECONDS = 15
 
 
 class StepObserver:
-    def __init__(self):
+    def __init__(self, watchdog=None):
         self.previous_ce = self.previous_n = 0
+        self.watchdog = watchdog
 
     def before_batch(self, state):
+        if self.watchdog is not None:
+            self.watchdog.touch()
         from kev.model import rows_of
         lengths = [len(prefix) + len(row["ids"])
                    for variant in state["part"]
@@ -46,6 +49,8 @@ class StepObserver:
                 "free_memory_gib": free / 2**30}
 
     def __call__(self, state):
+        if self.watchdog is not None:
+            self.watchdog.touch()
         step, run = state["step"], state["run"]
         # Kev resets its aggregate after steps 10, 20, ... . Difference the
         # accumulator to obtain this optimizer step's record-weighted CE.
@@ -277,7 +282,7 @@ def stream_training(command, *, cwd, env, log_dir, stage, timeout_seconds, requi
     return directory
 
 
-def main():
+def _main(watchdog):
     from lora_recovery import LoRARecovery
     path = Path(importlib.util.find_spec("kev.train").origin)
     source = path.read_bytes()
@@ -289,11 +294,17 @@ def main():
         from optimized_training import require_optimized_bindings
         recovery.backend = {**require_optimized_bindings(), "fused_adamw": os.environ.get("LAB_FUSED_ADAMW") == "1"}
         print("Verified training backend: " + json.dumps(recovery.backend), flush=True)
-    module.__dict__.update(__package__="kev", __file__=str(path), _lab_observe=StepObserver(),
+    module.__dict__.update(__package__="kev", __file__=str(path), _lab_observe=StepObserver(watchdog),
                            _lab_recovery=recovery)
     sys.modules["kev.train"] = module
     exec(instrument_trainer(source.decode("utf-8"), str(path), with_recovery=True), module.__dict__)
     module.main()
+
+
+def main():
+    from optimized_training import ProgressWatchdog
+    with ProgressWatchdog() as watchdog:
+        _main(watchdog)
 
 
 if __name__ == "__main__":

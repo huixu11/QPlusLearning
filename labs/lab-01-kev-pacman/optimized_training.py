@@ -4,6 +4,9 @@ Install an additive, hash-verified wheel overlay; keep Kev's uv.lock intact.
 Inference-only Kev fusion and CUDA graphs are not used for training.
 """
 import argparse
+from contextlib import contextmanager
+import faulthandler
+import functools
 import hashlib
 import inspect
 import json
@@ -13,6 +16,50 @@ import time
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent
+
+
+class ProgressWatchdog:
+    """Print Python stacks after a phase stops progressing; never kill the run."""
+    def __init__(self, seconds=60):
+        self.seconds = seconds
+
+    def __enter__(self):
+        faulthandler.enable()
+        self.touch()
+        return self
+
+    def touch(self):
+        faulthandler.cancel_dump_traceback_later()
+        faulthandler.dump_traceback_later(self.seconds, repeat=True)
+
+    def __call__(self, message):
+        print("LAB_PHASE " + json.dumps({"phase": message}), flush=True)
+        self.touch()
+
+    def __exit__(self, *exception):
+        faulthandler.cancel_dump_traceback_later()
+
+
+@contextmanager
+def track_kernel_calls(bindings):
+    """Count actual function dispatch without collecting a CPU/CUDA trace."""
+    originals, calls = [], {}
+    def wrap(name, function):
+        @functools.wraps(function)
+        def counted(*args, **kwargs):
+            calls[name] += 1
+            return function(*args, **kwargs)
+        return counted
+    try:
+        for name, owner, attribute in bindings:
+            function = getattr(owner, attribute)
+            calls[name] = 0
+            originals.append((owner, attribute, function))
+            setattr(owner, attribute, wrap(name, function))
+        yield calls
+    finally:
+        for owner, attribute, function in reversed(originals):
+            setattr(owner, attribute, function)
 
 
 def kernel_lock():
@@ -95,12 +142,32 @@ def require_optimized_bindings():
     return {"kernels": kernels, "versions": versions}
 
 
+def verify_bindings(report):
+    """Fast admission only: do not claim that a CUDA training step was tested."""
+    import torch
+    checked = require_optimized_bindings()
+    if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
+        raise RuntimeError("A BF16-capable CUDA GPU is required for optimized training")
+    checked.update(result="bindings_verified", optimizer_steps=0, cuda_loss_backward="not_run",
+                   scope="Pinned optimized bindings and CUDA/BF16 availability only; no model training executed")
+    Path(report).write_text(json.dumps(checked, indent=2) + "\n")
+    print("Optimized bindings verified; separate two-record training check skipped. "
+          "The first real training step exercises loss/backward/optimizer.", flush=True)
+
+
 def verify_training(base, revision, suite, report):
+    with ProgressWatchdog() as phase:
+        phase("importing pinned Kev/Transformers training stack")
+        _verify_training(base, revision, suite, report, phase)
+
+
+def _verify_training(base, revision, suite, report, phase):
     import sys
     import torch
     from kev.model import DecisionModel, load_tokenizer
     from kev.suite import load_split
     from kev.train import parse_args, encode_batch, row_passes, batch_loss
+    from transformers.models.qwen3_5 import modeling_qwen3_5 as qwen
     checked = require_optimized_bindings()
     print("Selected optimized training kernels: " + json.dumps(checked), flush=True)
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
@@ -113,6 +180,7 @@ def verify_training(base, revision, suite, report):
     args = parse_args()
     torch.manual_seed(args.seed)
     print("Loading the actual Kev backbone/LoRA/head for CUDA training verification", flush=True)
+    phase("loading tokenizer and actual backbone/LoRA/head")
     tok = load_tokenizer(base, revision=revision)
     model = DecisionModel(base, tok, "cuda", lora=16, revision=revision, lora_targets="all")
     model.lm.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -127,11 +195,10 @@ def verify_training(base, revision, suite, report):
     losses = []
     began = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
-    def phase(message):
-        print("LAB_PHASE " + json.dumps({"phase": message}), flush=True)
-
-    from torch.profiler import profile, ProfilerActivity
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as trace:
+    bindings = [("delta_rule", qwen, "torch_chunk_gated_delta_rule"),
+                ("convolution", qwen, "causal_conv1d_fn"),
+                ("fused_adamw", torch, "_fused_adamw_")]
+    with track_kernel_calls(bindings) as calls:
         for index, request in enumerate(requests, 1):
             record_started = time.perf_counter()
             print(f"CUDA training preflight {index}/2: FLA/conv compilation, loss, backward, fused AdamW", flush=True)
@@ -148,7 +215,8 @@ def verify_training(base, revision, suite, report):
             names = [name for name, p in model.named_parameters() if p.grad is not None]
             if not any(name.startswith("head.") for name in names) or not any("lora_B" in name for name in names):
                 raise RuntimeError("Preflight did not backpropagate through the LoRA and pointer head")
-            if any(not torch.isfinite(p.grad).all() for p in model.trainable_parameters() if p.grad is not None):
+            finite = torch.stack([torch.isfinite(p.grad).all() for p in model.trainable_parameters() if p.grad is not None]).all()
+            if not finite.item():
                 raise RuntimeError("Non-finite gradients in optimized training preflight")
             phase(f"check {index}/2: clipping gradients and fused AdamW step")
             torch.nn.utils.clip_grad_norm_(model.trainable_parameters(), 1.0, error_if_nonfinite=True)
@@ -158,14 +226,12 @@ def verify_training(base, revision, suite, report):
             losses.append(loss_sum)
             phase(f"check {index}/2 completed in {time.perf_counter() - record_started:.1f}s; loss {loss_sum:.4f}")
         torch.cuda.synchronize()
-        phase("both optimizer checks complete; finalizing CUDA profiler")
-    phase("reading profiler operators and writing verification report")
-    operators = sorted({event.key for event in trace.key_averages()
-                        if "scaled_dot_product" in event.key or "fused_adam" in event.key})
-    if not any("fused_adam" in operator for operator in operators):
-        raise RuntimeError("Profiler did not observe fused AdamW")
+    phase("both optimizer checks complete; writing verification report")
+    if not all(calls.values()) or calls["fused_adamw"] < 2:
+        raise RuntimeError(f"Preflight did not execute all optimized kernels: {calls}")
     checked.update(result="passed", optimizer="torch.optim.AdamW(fused=True)", attention="sdpa",
-                   profiler_operators=operators, dtype="bf16 autocast / fp32 parameters", checkpointing=True,
+                   kernel_calls=calls, cuda_loss_backward="passed",
+                   dtype="bf16 autocast / fp32 parameters", checkpointing=True,
                    optimizer_steps=2, losses=losses, peak_memory_gib=torch.cuda.max_memory_allocated() / 2**30,
                    seconds_including_kernel_compilation=time.perf_counter() - began,
                    scope="Two actual decision-v7 records: loss/backward/optimizer; not a full-stage VRAM or timing result")
@@ -175,7 +241,14 @@ def verify_training(base, revision, suite, report):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    for name in ("base", "revision", "suite", "report"):
-        parser.add_argument("--" + name, required=True)
+    parser.add_argument("--report", required=True)
+    parser.add_argument("--bindings_only", action="store_true")
+    for name in ("base", "revision", "suite"):
+        parser.add_argument("--" + name)
     cli = parser.parse_args()
-    verify_training(cli.base, cli.revision, cli.suite, cli.report)
+    if cli.bindings_only:
+        verify_bindings(cli.report)
+    else:
+        if not all((cli.base, cli.revision, cli.suite)):
+            parser.error("--base, --revision and --suite are required for the two-record training check")
+        verify_training(cli.base, cli.revision, cli.suite, cli.report)
