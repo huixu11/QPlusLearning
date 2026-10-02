@@ -34,7 +34,7 @@ class CloudRuntimeTests(unittest.TestCase):
         recipe_file = ROOT / "vendor/kev/experiments/q35-08b.json"
         recipe = json.loads(recipe_file.read_text())[2]
         with tempfile.TemporaryDirectory() as folder:
-            runtime = CloudRuntime(folder)
+            runtime = CloudRuntime(folder, training_profile="published_reference")
             (runtime.repo / "experiments").mkdir(parents=True)
             shutil.copy2(recipe_file, runtime.repo / "experiments/q35-08b.json")
             command = runtime.pretraining_command(Path(folder) / "initial")
@@ -76,7 +76,7 @@ class CloudRuntimeTests(unittest.TestCase):
                 "head_dim": 256, "option_isolation": False, "special_embeddings": False,
                 "weights_dtype": "fp32", "weights": "lora"}
         with tempfile.TemporaryDirectory() as folder:
-            runtime = CloudRuntime(folder)
+            runtime = CloudRuntime(folder, training_profile="published_reference")
             for stage, parent in [("dates", "initial"), ("documents_skills", "dates")]:
                 with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
                     command = runtime.intermediate_command(stage, "new-checkpoint", Path(folder) / parent)
@@ -91,6 +91,42 @@ class CloudRuntimeTests(unittest.TestCase):
                 if stage == "dates":
                     self.assertEqual(flags["--checkpointing"], "0")
                     self.assertEqual(flags["--max_state"], "384")
+
+    def test_memory_profile_preserves_effective_batch_and_curriculum(self):
+        recipe_file = ROOT / "vendor/kev/experiments/q35-08b.json"
+        meta = {"base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "base-pin", "lora": 16,
+                "head_dim": 256, "option_isolation": False, "special_embeddings": False,
+                "weights_dtype": "fp32", "weights": "lora"}
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            (runtime.repo / "experiments").mkdir(parents=True)
+            shutil.copy2(recipe_file, runtime.repo / "experiments/q35-08b.json")
+            commands = [runtime.pretraining_command("initial")]
+            with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
+                commands += [runtime.intermediate_command(s, s, "parent") for s in specifications()]
+                commands += [runtime.training_command("reviewed.jsonl", "domain", "parent")]
+            for command in commands:
+                flags = dict(zip(command[3::2], command[4::2]))
+                self.assertEqual(int(flags["--batch"]) * int(flags["--accum"]), 8)
+                self.assertEqual(flags["--batch"], "1")
+                self.assertEqual(flags["--checkpointing"], "1")
+                self.assertEqual(flags["--row_budget"], "2048")
+            initial = dict(zip(commands[0][3::2], commands[0][4::2]))
+            self.assertEqual(initial["--epochs"], "2")
+            self.assertEqual(initial["--p_none_pair"], "0.25")
+            self.assertEqual(runtime.selected_recipe({"lr": 1e-4, "batch": 8})["lr"], 1e-4)
+            self.assertEqual(runtime.environment()["PYTORCH_CUDA_ALLOC_CONF"], "expandable_segments:True")
+
+    def test_old_failed_run_cannot_be_resumed_without_weights(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            output = Path(folder) / "old"
+            output.mkdir()
+            (output / "training_config.json").write_text('{}')
+            with self.assertRaisesRegex(RuntimeError, "No resumable LoRA snapshot"):
+                runtime._train([], output, 90, "initial", resume=True)
+            with self.assertRaisesRegex(RuntimeError, "Choose a new"):
+                runtime._train([], output, 90, "initial")
 
 
 if __name__ == "__main__":

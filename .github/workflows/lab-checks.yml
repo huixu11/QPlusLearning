@@ -16,11 +16,12 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/python -m pip install -r labs/lab-01-kev-pacman/test-requirements.txt
+          .venv/bin/python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
       - name: Check game rules and training commands
         run: .venv/bin/python -m unittest discover -s labs/lab-01-kev-pacman -p 'test_*.py'
       - name: Rebuild teaching artifacts
         run: python3 labs/lab-01-kev-pacman/build_artifacts.py
-      - name: Check notebook syntax and bundled sources
+      - name: Check notebook syntax and pinned sources
         run: python3 scripts/check_notebook.py
       - name: Confirm generated artifacts are current
         run: git diff --exit-code -- labs/lab-01-kev-pacman/notebooks/pacman_kev_lab.ipynb labs/lab-01-kev-pacman/games/pacman.html

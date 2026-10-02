@@ -23,17 +23,29 @@ The RTX PRO 6000 target uses **BF16 inference and BF16 training autocast**. Kev'
 
 Initial training uses all 12,576 decision-v7 training records, two epochs, batch 8, accumulation 1, learning rate 1e-4, rank-16 LoRA and a fresh 256-dimensional pointer head. It retains upstream augmentation and OneCycleLR. It passes no `--init_from`. The published 20-minute initial run used an H100 and is not a timing estimate for this lab. The complete run belongs in prework and has a configurable 90-minute attempt cap.
 
+Those batch settings describe the **published reference**. The notebook defaults to `memory_safe`: batch 1 × accumulation 8, gradient checkpointing and a 2,048 padded-token row budget on every stage. This retains the curriculum and effective batch, but microbatch weighting/dropout/row execution differ. Select `TRAINING_PROFILE='published_reference'` in setup for the original settings. A user's original reference run exhausted 94.97 GiB VRAM at step 2,073; Qwen's fallback DeltaNet operators and expanded question rows make training much larger than the stored 0.8B parameters alone. The revised profile needs a GPU rerun. Allocator `expandable_segments` is enabled when no allocator configuration was supplied; it cannot free active training intermediates.
+
 During the mandatory 30-minute class block, fine-tune **your own documents/skills adapter/head** with `--init_from`, batch 1, accumulation 8, two epochs, learning rate 2e-5, gradient checkpointing and a 2,048-token state budget. With all 64 accepted training boards this gives 16 steps. Stop inference while training, then reload the checkpoint. Legal directions are the complete action set, so this adaptation disables none/distractor insertion while retaining option shuffling. Record actual duration and peak memory. The training attempt has a 20-minute cap.
 
 Stage 2 adds 1,425 dates/missing-evidence records plus 2,000 replayed decision-v7 records for one epoch at lr 4e-5. Stage 3 adds 16,539 documents/skills records plus 6,000 replayed records for one epoch at lr 2e-5, batch 4 × accumulation 2, a 7,552-token state budget and gradient checkpointing. Both preserve upstream none-pair augmentation. Their default attempt caps are 90 minutes each, configurable after GPU measurements. Calibration is discussed separately and is not fitted or copied from the release. All four training stages update LoRA and the pointer head while original base matrices remain fixed.
 
 ## Live training curves
 
+GPU telemetry includes live allocated, reserved and free VRAM. `batches.jsonl` records physical question rows, longest row, padded tokens and record IDs before each forward pass, including an OOM-triggering pass. Check these alongside the TensorBoard curves before attributing an OOM to gradual growth or a single large batch.
+
 The setup cell installs `tensorboard==2.20.0` in the notebook kernel. Open its dashboard before Stage 1. Training runs in Kev's separate locked environment; telemetry is relayed back to the notebook and written to `logs/<stage>/<attempt>/tensorboard`, alongside raw logs, CSV and JSONL. The dashboard updates during training. Console heartbeats distinguish loading/data preparation from completed optimizer steps. Download the submission archive to retain curves after disconnecting.
+
+## Periodic LoRA recovery
+
+The revised helper saves at optimizer step 1, then every 100 steps or five minutes, and the final step; the time interval is checked at optimizer boundaries. It retains the latest two complete snapshots under `<output>-recovery`, including adapter/head exports, optimizer, scheduler, RNG and progress. Resume with the affected stage's `RESUME_* = True` and the same profile, arguments, inputs and output path. Do not pass Kev's native `--resume`, which is restricted to full-weight runs. Resume refuses a completed run or a run without a recovery snapshot.
+
+Set `SAVE_TO_DRIVE=True` **before** training to persist new outputs/recovery on Drive. Local `/content` storage is temporary. The notebook's inspection/export cell can download recovery and logs after an exception; set `INSPECT_OUTPUT` to the failed stage. Restore a recovery archive into an absent checkpoint root at its original absolute path. Completed checkpoint backups retain the existing per-stage restore controls. Keep the parent checkpoints and identical training data when resuming a later stage.
+
+The previous notebook had no periodic LoRA save. Its step-2,073 failure normally leaves `training_config.json` and logs, with no adapter/head weights from that run. An older completed or manually saved checkpoint would be separate. The new `*-v2` directories preserve the failed run's files. Use the new notebook's inspection cell to check the old directory before starting again.
 
 ## Instructor preparation
 
-Run the full notebook on the intended Colab allocation before teaching. Confirm dependency installation, context length, positive optimizer steps, checkpoint reloads, paired evaluation and the live browser callback. Prepare a compatible checkpoint and recorded evaluation for allocation failures. GPU execution and the live callback have not yet been tested for this draft.
+Run the full notebook on the intended Colab allocation before teaching. Confirm dependency installation, context length, positive optimizer steps, checkpoint reloads, paired evaluation and the live browser callback. Prepare a compatible checkpoint and recorded evaluation for allocation failures. The original initial run OOMed; completion with the revised profile, CUDA recovery and the live callback still need validation.
 
 Keep the 90-minute session and the mandatory 30-minute fine-tuning block. Measure setup separately. Measure cost using actual session duration and compute units consumed rather than inventing a fixed Colab dollar rate.
 

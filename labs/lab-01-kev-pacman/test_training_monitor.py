@@ -34,6 +34,7 @@ class MonitorTests(unittest.TestCase):
         pinned = Path(__file__).parent / "vendor/kev/kev/train.py"
         self.assertEqual(hashlib.sha256(pinned.read_bytes()).hexdigest(), TRAIN_SHA256)
         instrument_trainer(pinned.read_text(), str(pinned))
+        instrument_trainer(pinned.read_text(), str(pinned), with_recovery=True)
         source = "step = 1\nresult = 7 * 9\nif step % 10 == 0:\n    result += 1\n"
         seen = []
         scope = {"_lab_observe": lambda state: seen.append(state["result"])}
@@ -75,3 +76,13 @@ class MonitorTests(unittest.TestCase):
             status = json.loads((directory / "status.json").read_text())
             self.assertEqual(status["status"], "timed_out")
             self.assertLess(status["elapsed_seconds"], 5)
+
+    def test_batch_diagnostics_and_final_step_resume_survive_stream(self):
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+            directory = Path(folder) / "resume"
+            batch = {"next_step": 3, "physical_rows": 12, "max_row_tokens": 512, "padded_tokens": 6144}
+            code = f"print('LAB_BATCH ' + {json.dumps(batch)!r}); print('LAB_RESUMED ' + '{{\"step\": 3, \"steps\": 3}}')"
+            stream_training([sys.executable, "-u", "-c", code], cwd=folder, env=os.environ.copy(),
+                            log_dir=directory, stage="test", timeout_seconds=10)
+            self.assertEqual(json.loads((directory / "batches.jsonl").read_text()), batch)
+            self.assertEqual(json.loads((directory / "status.json").read_text())["resumed"]["step"], 3)

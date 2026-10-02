@@ -10,7 +10,9 @@ Start with [the student notebook](notebooks/pacman_kev_lab.ipynb) and [Colab set
 
 ## Recipe and timetable
 
-The notebook executes the pinned upstream `kev.train` source with one added observer call in memory. The upstream checkout and training calculations remain unchanged. Initial training reads the seed-2 arm from `experiments/q35-08b.json`: all 12,576 decision-v7 training records, two epochs, learning rate 1e-4, batch 8, accumulation 1, BF16 autocast over FP32 weights, LoRA rank 16 / alpha 32, and a 256-dimensional pointer head. Upstream supplies AdamW, OneCycleLR, cross-entropy, option shuffling, none/distractor augmentation and 25% none minimal pairs. The command has no `--init_from`.
+The notebook executes checksum-verified upstream `kev.train` source with telemetry and LoRA recovery hooks in memory. The upstream checkout stays pinned. The published initial reference is the seed-2 arm of `experiments/q35-08b.json`: all 12,576 decision-v7 training records, two epochs, learning rate 1e-4, batch 8, accumulation 1, BF16 autocast over FP32 weights, LoRA rank 16 / alpha 32, and a 256-dimensional pointer head. Upstream supplies AdamW, OneCycleLR, cross-entropy, option shuffling, none/distractor augmentation and 25% none minimal pairs. The command has no `--init_from`.
+
+The default `memory_safe` profile changes execution to **batch 1, accumulation 8, gradient checkpointing and `row_budget=2048`** for every stage. The data, epochs, effective batch, architecture, augmentation settings and learning-rate schedule remain as documented. Microbatch weighting, dropout and row grouping differ, so results are not an exact numerical reproduction. Set `training_profile='published_reference'` for the original settings. The change responds to a user-reported OOM at step 2,073/3,144 on a 94.97 GiB GPU with 89.90 GiB actively allocated, using Qwen's memory-heavy reference DeltaNet path. The new profile still requires a GPU rerun. The row budget splits questions into passes; a single longer question runs intact without silently dropping/truncating records.
 
 **Complete all three general-decision training stages as prework**, along with installation and downloads. The published base run took about 20 minutes on an H100. We have not measured this Colab target, so the full initial run has no promised class-time duration. The helper gives prework a configurable 90-minute attempt cap. Keep each stage checkpoint; the documents/skills checkpoint is the class baseline.
 
@@ -43,9 +45,17 @@ Calibration is separate and is not applied here. Fresh checkpoints do not inheri
 
 Open the TensorBoard cell **before** training. Colab supports an embedded dashboard. Every optimizer step records cross-entropy, next-step learning rate, gradient norm before clipping, epoch, step duration, records seen and peak allocated GPU memory. Each stage has its own run directory under `logs/`. These are training curves, with no fabricated validation curve.
 
-The helper captures stdout/stderr explicitly for Colab. Console progress appears at the first step, every ten steps and the last step, with a 15-second heartbeat during loading and long steps. It preserves raw logs, JSONL, CSV, TensorBoard event files and a completion/failure status, including when a run times out. [training_monitor.py](training_monitor.py) checks the exact upstream trainer checksum and inserts only an observer call in memory.
+The helper captures stdout/stderr explicitly for Colab. Console progress appears at the first step, every ten steps and the last step, with a 15-second heartbeat during loading and long steps. It preserves raw logs, JSONL, CSV, TensorBoard event files and a completion/failure status, including when a run times out. GPU curves now include live allocated, reserved and free memory. `batches.jsonl` records row counts, longest rows, padded tokens and record IDs before each forward pass, so a failing batch remains inspectable. [training_monitor.py](training_monitor.py) checks the upstream checksum and every telemetry/recovery insertion site.
 
-The former `BUNDLED_FILES` dictionary kept the notebook independent of a checkout by embedding helpers and licensed game source. Setup now downloads nine small files from a pinned public course commit and verifies their hashes; [notebook-source.json](notebook-source.json) records that pin. GitHub access is required on first use. TensorBoard is installed in the notebook kernel, while Kev's locked model environment remains separate.
+The former `BUNDLED_FILES` dictionary kept the notebook independent of a checkout by embedding helpers and licensed game source. Setup now downloads ten small files from a pinned public course commit and verifies their hashes; [notebook-source.json](notebook-source.json) records that pin. GitHub access is required on first use. TensorBoard is installed in the notebook kernel, while Kev's locked model environment remains separate.
+
+## Recovery after interruption
+
+[lora_recovery.py](lora_recovery.py) saves trainable parameters, AdamW state, OneCycleLR state, CPU/CUDA/Python RNG and training counters at optimizer boundaries: after step 1, every 100 steps or five minutes, and at the final step. Snapshots include loadable adapter/head exports, are committed through a completion marker and latest pointer, and retain the latest two complete saves under `<output>-recovery`. The native Kev `--resume` flag is full-weight-only; the lab implements LoRA recovery separately. CPU checks establish identical continuation with dropout, including optimizer moments and scheduler state; CUDA continuation is not yet validated.
+
+After a failure, keep the same arguments, profile, data, parent checkpoint and output path, and set the relevant `RESUME_INITIAL`, `RESUME_DATES`, `RESUME_SKILLS` or `RESUME_PACMAN` to `True`. Changing the profile requires a new run. Optional `SAVE_TO_DRIVE=True` puts outputs and recovery on Drive before training. Otherwise download the recovery ZIP and logs before Colab discards its temporary filesystem. Recovery ZIPs must return to the original absolute checkpoint root; complete checkpoint ZIPs can be restored through each stage's existing controls.
+
+**The previous notebook only saved LoRA weights after training finished. Its failed step-2,073 run has no automatic learned checkpoint.** Configuration and telemetry are not learned weights, and weights cannot be recovered after the child process exits. The new notebook uses `*-v2` output folders to preserve old files and includes an inspection/export cell. Partial snapshots cannot substitute for a completed curriculum stage.
 
 ## Game and data
 
@@ -59,7 +69,7 @@ Compare the learner's documents/skills checkpoint against their Pac-Man checkpoi
 
 ## Validation and provenance
 
-GPU execution, training timing, reloads and the live Colab callback are **not yet tested**. Before teaching, run the complete notebook on the intended allocation and prepare compatible instructor checkpoints and recorded evaluations. Label supplied results as instructor results. The setup's parameter audit checks that only LoRA and the pointer head can train; it does not replace a real training run.
+The original initial profile ran on the user's GPU and **failed with OOM at step 2,073/3,144**. Completion of the revised profile, CUDA recovery, training timing, reloads and the live Colab callback remain **unvalidated**. Before teaching, run the complete notebook on the intended allocation and prepare compatible instructor checkpoints and recorded evaluations. Label supplied results as instructor results. The setup's parameter audit checks that only LoRA and the pointer head can train; it does not replace a real training run.
 
 Kev source: `84847f0a883d900f7de5b7a57eaa341ca7f9a6b4`. Qwen base: `Qwen/Qwen3.5-0.8B-Base@dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68`. The suite loader verifies the training partition against its manifest checksum. [upstream.json](upstream.json) records these pins and the optional released-model reference. Vendored recipe and game files retain their upstream licenses; see [third-party provenance](vendor/README.md).
 
@@ -67,6 +77,7 @@ Clone this repository, then run the CPU checks and regenerate the notebook/game 
 
 ```bash
 python3 -m pip install -r labs/lab-01-kev-pacman/test-requirements.txt
+python3 -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
 python3 -m unittest discover -s labs/lab-01-kev-pacman -p 'test_*.py'
 python3 labs/lab-01-kev-pacman/build_artifacts.py
 python3 scripts/check_notebook.py

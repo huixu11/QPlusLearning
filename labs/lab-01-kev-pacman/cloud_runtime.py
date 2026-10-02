@@ -15,6 +15,7 @@ from urllib.request import urlopen
 
 from training_monitor import stream_training
 from training_stages import checkpoint_fingerprint, specifications
+from lora_recovery import latest_snapshot
 
 CODE_REVISION = "84847f0a883d900f7de5b7a57eaa341ca7f9a6b4"
 MODEL_RUN = "jaredpalmer/kev-0.8b@bf75a6a8848ea6960ff2ed108d9ed44c2941174f"
@@ -22,9 +23,10 @@ TARGET_GPU = "RTX PRO 6000 Blackwell"
 BASE_MODEL = "Qwen/Qwen3.5-0.8B-Base"
 BASE_REVISION = "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68"
 TRAINING_SUITE = "evals/v7/decision-v7"
+MEMORY_OVERRIDES = {"batch": 1, "accum": 8, "checkpointing": 1, "row_budget": 2048}
 
 GPU_PREFLIGHT = """
-import json, torch
+import importlib.util, json, torch
 if not torch.cuda.is_available():
     raise RuntimeError('Select a GPU in Runtime > Change runtime type, then reconnect.')
 props = torch.cuda.get_device_properties(0)
@@ -37,7 +39,9 @@ torch.cuda.synchronize()
 print(json.dumps({'name': props.name, 'memory_gib': props.total_memory / 2**30,
                   'compute_capability': [props.major, props.minor],
                   'torch': torch.__version__, 'cuda': torch.version.cuda,
-                  'bf16_supported': bf16, 'kernel_backward': 'passed'}))
+                  'bf16_supported': bf16, 'kernel_backward': 'passed',
+                  'optional_deltanet_packages': {name: importlib.util.find_spec(name) is not None
+                                                for name in ['causal_conv1d', 'fla']}}))
 """
 
 
@@ -60,7 +64,9 @@ def validate_gpu(info, allow_other_gpu=False):
 
 
 class CloudRuntime:
-    def __init__(self, workspace, allow_other_gpu=False):
+    def __init__(self, workspace, allow_other_gpu=False, training_profile="memory_safe"):
+        if training_profile not in {"memory_safe", "published_reference"}:
+            raise ValueError("Choose memory_safe or published_reference training_profile")
         self.workspace = Path(workspace).resolve()
         self.repo = self.workspace / "kev"
         self.python = self.repo / ".venv" / "bin" / "python"
@@ -69,6 +75,20 @@ class CloudRuntime:
         self.allow_other_gpu = allow_other_gpu
         self.gpu = None
         self.dtype = "bf16"
+        self.training_profile = training_profile
+
+    def selected_recipe(self, recipe):
+        return {**recipe, **(MEMORY_OVERRIDES if self.training_profile == "memory_safe" else {})}
+
+    def _profile(self, command):
+        if self.training_profile == "memory_safe":
+            for key, value in MEMORY_OVERRIDES.items():
+                flag = "--" + key
+                if flag in command:
+                    command[command.index(flag) + 1] = str(value)
+                else:
+                    command += [flag, str(value)]
+        return command
 
     def setup(self):
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -92,6 +112,10 @@ class CloudRuntime:
         env = dict(os.environ)
         # BF16 on the target GPU. A validated T4 fallback uses FP32.
         env.update(KEV_DTYPE=self.dtype, KEV_BACKEND="torch", KEV_FUSED="0", KEV_CUDA_GRAPHS="0", PYTHONUNBUFFERED="1")
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        # Recovery settings belong to one launch, never inherit another run's.
+        for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS"):
+            env.pop(name, None)
         env.pop("KEV_API_KEY", None)  # this server binds only to notebook-local loopback
         return env
 
@@ -134,11 +158,11 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             command += ["--" + key, str(value)]
         if steps:
             command += ["--max_steps", str(steps)]
-        return command
+        return self._profile(command)
 
-    def pretrain(self, output, steps=0, timeout_minutes=90):
+    def pretrain(self, output, steps=0, timeout_minutes=90, resume=False):
         """Published decision-v7 base stage, without --init_from. Full run is prework."""
-        return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial")
+        return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial", resume=resume)
 
     def prepare_intermediate_data(self):
         code = "import sys; sys.path.insert(0, sys.argv[1]); from training_stages import prepare_data; prepare_data(sys.argv[2])"
@@ -164,11 +188,11 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                                "p_none": 0.1, "p_none_distract": 0.12, "p_distract": 0.15}.items():
                 command[command.index("--" + key) + 1] = str(value)
         command += ["--suite", TRAINING_SUITE]
-        return command
+        return self._profile(command)
 
-    def intermediate(self, stage, output, init_from, timeout_minutes=90):
+    def intermediate(self, stage, output, init_from, timeout_minutes=90, resume=False):
         command = self.intermediate_command(stage, output, init_from)
-        return self._train(command, output, timeout_minutes, stage)
+        return self._train(command, output, timeout_minutes, stage, resume=resume)
 
     def start(self, run=MODEL_RUN):
         self.stop()
@@ -218,28 +242,50 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         command += ["--lora_targets", "all"]
         if meta["base_revision"]:
             command += ["--base_revision", meta["base_revision"]]
-        return command
+        return self._profile(command)
 
-    def finetune(self, training_data, output, init_from, steps=0):
+    def finetune(self, training_data, output, init_from, steps=0, resume=False):
         command = self.training_command(training_data, output, init_from, steps)
-        return self._train(command, output, 20, "pacman")
+        return self._train(command, output, 20, "pacman", resume=resume)
 
-    def _train(self, command, output, timeout_minutes, stage):
+    def _train(self, command, output, timeout_minutes, stage, resume=False):
         output = Path(output).resolve()
-        if output.exists():
-            raise RuntimeError("Choose a new checkpoint output directory for each training run.")
+        recovery_root = Path(str(output) + "-recovery")
+        snapshot = latest_snapshot(recovery_root) if resume else None
+        if resume and (snapshot is None or not output.is_dir()):
+            raise RuntimeError("No resumable LoRA snapshot for this output. Older failed runs saved logs/config only; choose a new output.")
+        if (output.exists() or recovery_root.exists()) and not resume:
+            raise RuntimeError("Choose a new checkpoint output directory, or resume=True for a run with recovery snapshots.")
+        if resume and (output / "run-evidence.json").exists():
+            raise RuntimeError("This checkpoint is already complete; use it as the next stage's input.")
         self.stop()  # release the inference model's GPU allocation before training
         started = time.perf_counter()
         log_dir = self.workspace / "logs" / stage / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
-        # The observer executes the pinned upstream trainer in memory. It adds
-        # logging only; Kev's checkout, flags and training calculations stay intact.
+        # The pinned trainer is instrumented in memory; native --resume is
+        # full-weight-only, so the lab restores LoRA state through guarded hooks.
         observer = Path(__file__).with_name("training_monitor.py")
         launch = [command[0], "-u", str(observer), *command[3:]]
-        stream_training(launch, cwd=self.repo, env=self.environment(), log_dir=log_dir,
-                        stage=stage, timeout_seconds=timeout_minutes * 60)
+        env = self.environment()
+        env.update(LAB_RECOVERY_ROOT=str(recovery_root), LAB_SAVE_STEPS="100", LAB_SAVE_SECONDS="300")
+        if snapshot:
+            env["LAB_RESUME_FROM"] = str(snapshot)
+        try:
+            stream_training(launch, cwd=self.repo, env=env, log_dir=log_dir,
+                            stage=stage, timeout_seconds=timeout_minutes * 60)
+        except (Exception, KeyboardInterrupt):
+            saved = latest_snapshot(recovery_root)
+            if saved:
+                info = json.loads((saved / "complete.json").read_text())
+                print(f"Recovery available at step {info['step']}/{info['steps']}: {saved}. "
+                      "Rerun with resume=True and identical arguments. Preserve this directory before disconnecting.", flush=True)
+            else:
+                print("No learned checkpoint saved yet. Logs: " + str(log_dir), flush=True)
+            raise
         evidence = {"stage": stage, "command": command, "elapsed_seconds_including_load_save": time.perf_counter() - started,
                     "gpu": self.gpu, "code_revision": CODE_REVISION, "observer_command": launch,
-                    "training_logs": str(log_dir), "telemetry": "one sample per optimizer step"}
+                    "training_logs": str(log_dir), "telemetry": "one sample per optimizer step",
+                    "training_profile": self.training_profile, "recovery_root": str(recovery_root),
+                    "resumed_from": str(snapshot) if snapshot else None}
         if "--init_from" in command:
             evidence["parent_checkpoint_sha256"] = checkpoint_fingerprint(command[command.index("--init_from") + 1])
         if "--data" in command:
