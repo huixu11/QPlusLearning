@@ -2,28 +2,29 @@
   "checked_at": "2026-10-02",
   "cpu_tests": {
     "result": "passed",
-    "count": 33,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation"
+    "count": 38,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; benchmark warmup exclusion, failed-case handling, production-file preservation and selection guards"
   },
   "notebook": {
-    "code_cells": 22,
+    "code_cells": 23,
     "pinned_helper_files": 12,
     "syntax": "passed",
     "source_consistency": "passed",
     "bootstrap_with_local_verified_responses": "passed",
     "cached_bootstrap_and_helper_refresh": "passed; preserves existing checkpoint files",
-    "separate_preparation_defaults_to_skip": "passed with mock runtime"
+    "separate_preparation_defaults_to_skip": "passed with mock runtime",
+    "optional_benchmark_controls": "passed with mock runtime; disabled by default"
   },
   "slides": {
     "count": 23,
     "visual_qa": "All 23 native PDF renders inspected after Kev-4B curriculum update; zero output issues; readback matches content; native geometry preserved",
     "note": "Native slides and PDF/PPTX exports updated for five separate stages"
   },
-  "gpu_training": "optimized_kev_4b_not_run",
+  "gpu_training": "full_optimized_kev_4b_curriculum_not_run_by_course_author",
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "dab3562e72738feb842b5b67344a218137eb9a277617ae014196556ba57d1a83",
+    "notebooks/pacman_kev_lab.ipynb": "468e866aa5f3509a6c40df8b5fdecc8f8a77c74cd229f8035fa8aee6254b646a",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
     "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
@@ -75,5 +76,23 @@
     "cuda_profiler": "removed",
     "optional_two_record_cuda_check": "not_run",
     "actual_cuda_training": "not_run"
+  },
+  "initial_throughput_benchmark": {
+    "cuda_trials": "not_run_by_course_author",
+    "steps_per_case": 40,
+    "warmup_steps_excluded": 8,
+    "cases": 4,
+    "execution_change_cuda_continuation": "not_run_by_course_author"
+  },
+  "learner_reported_4b_initial_progress": {
+    "source": "learner console excerpt; not independently inspected on GPU",
+    "last_completed_step": 313,
+    "total_steps": 3144,
+    "elapsed_minutes": 9.8,
+    "peak_gib_at_step_310": 17.74,
+    "gpu_utilization_sample_count": 27,
+    "mean_gpu_utilization_percent": 50.1,
+    "mean_power_watts": 213.0,
+    "power_limit_watts": 600
   }
 }
