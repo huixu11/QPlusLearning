@@ -1,4 +1,5 @@
 """Check hardware admission and the published-to-domain checkpoint transition."""
+import ast
 import json
 from pathlib import Path
 import shutil
@@ -13,6 +14,41 @@ ROOT = Path(__file__).resolve().parent
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def test_notebook_initial_resume_explicitly_uses_4x2_after_prior_selection(self):
+        notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
+        source = next(''.join(cell['source']) for cell in notebook['cells']
+                      if cell['cell_type'] == 'code' and ''.join(cell['source']).startswith('INITIAL ='))
+        tree = ast.parse(source)
+        for statement in tree.body:
+            if isinstance(statement, ast.Assign) and any(
+                    isinstance(target, ast.Name) and target.id in {'RESUME_INITIAL', 'ALLOW_INITIAL_EXECUTION_CHANGE'}
+                    for target in statement.targets):
+                statement.value = ast.copy_location(ast.Constant(True), statement.value)
+        code = compile(tree, '<notebook initial resume>', 'exec')
+        for previous in (None, {'batch': 1, 'accum': 8, 'row_budget': 2048},
+                         {'batch': 2, 'accum': 4, 'row_budget': 4096}):
+            with self.subTest(previous=previous), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder, initial_execution=previous)
+                (runtime.repo / 'experiments').mkdir(parents=True)
+                shutil.copy2(ROOT / 'vendor/kev/experiments/q35-4b-s23.json',
+                             runtime.repo / 'experiments/q35-4b-s23.json')
+                output = Path(folder) / 'checkpoints/kev-4b-initial'
+                namespace = {'runtime': runtime, 'CHECKPOINT_ROOT': output.parent, 'STAGE_OWNERS': {},
+                             'json': json, 'print': lambda *args, **kwargs: None,
+                             'inspect_checkpoint': lambda *args, **kwargs: ({}, {})}
+                with patch.object(runtime, '_train', return_value=output) as train:
+                    exec(code, namespace)
+                command = train.call_args.args[0]
+                flags = dict(zip(command[3::2], command[4::2]))
+                self.assertEqual([flags['--' + key] for key in ('batch', 'accum', 'row_budget')], ['4', '2', '0'])
+                self.assertEqual(flags['--out'], str(output.resolve()))
+                self.assertEqual(flags['--checkpointing'], '1')
+                self.assertEqual(flags['--lr'], '5e-05')
+                self.assertTrue(train.call_args.kwargs['resume'])
+                self.assertTrue(train.call_args.kwargs['allow_execution_change'])
+                self.assertEqual(runtime.selected_initial_recipe({})['batch'], 4)
+                self.assertEqual(runtime.selected_recipe({})['batch'], 1)
+
     def test_initial_execution_changes_only_batching_and_keeps_published_training_recipe(self):
         recipe_file = ROOT / 'vendor/kev/experiments/q35-4b-s23.json'
         with tempfile.TemporaryDirectory() as folder:

@@ -65,8 +65,7 @@ The target GPU is an assumption for this session, not a free-compute promise. [C
     code("""from pathlib import Path
 from urllib.request import urlopen
 import hashlib, json, os, sys
-TRAINING_PROFILE = 'memory_safe'  # 'published_reference' reproduces the original execution flags
-INITIAL_EXECUTION = None  # Optional benchmark-selected {'batch': 4, 'accum': 2, 'row_budget': 8192}
+TRAINING_PROFILE = 'memory_safe'  # Later stages; Stage 1 explicitly selects 4 x 2 below
 LAB_DIR = Path.cwd() / 'pacman-kev-lab'
 LAB_DIR.mkdir(exist_ok=True)
 COURSE_REVISION = """ + repr(lock['revision']) + """
@@ -96,7 +95,7 @@ from pacman_lab import *
 from api_client import call, distribution
 SOURCE_HTML = (LAB_DIR / 'vendor/jev-pacman/index.html').read_text()
 MAZE = maze_from_html(SOURCE_HTML)
-runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE, initial_execution=INITIAL_EXECUTION)
+runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
 manifest = make_data(SOURCE_HTML, LAB_DIR / 'data')
 GAME = notebook_game(SOURCE_HTML, (LAB_DIR / 'games/player-controller.js').read_text(), (LAB_DIR / 'vendor/jev-pacman/LICENSE').read_text())
 STAGE_OWNERS = {}
@@ -126,7 +125,7 @@ if SHOW_TENSORBOARD:
     code("runtime.setup()")
     md("""## Required optimized training stack
 
-Setup extends Kev's frozen environment with hash-pinned wheels: **Flash Linear Attention / fla-core 0.5.2**, **causal-conv1d 1.7.0** (Python 3.13, Torch 2.8, CUDA 12, Linux x86_64, CXX11 ABI), einops 0.8.1 and Ninja 1.13.0. Torch 2.8.0 / CUDA 12.8, Triton 3.4.0, Transformers 5.17 and PEFT remain at Kev's locked versions. Dependencies are installed without replacing that stack. SDPA handles full attention; FLA's Triton kernels handle DeltaNet; the CUDA convolution handles its short convolution. Training uses fused AdamW, BF16 autocast, gradient checkpointing, gradient accumulation and bounded row passes. The LoRA/head recipe and curriculum remain in Kev's trainer.
+Setup extends Kev's frozen environment with hash-pinned wheels: **Flash Linear Attention / fla-core 0.5.2**, **causal-conv1d 1.7.0** (Python 3.13, Torch 2.8, CUDA 12, Linux x86_64, CXX11 ABI), einops 0.8.1 and Ninja 1.13.0. Torch 2.8.0 / CUDA 12.8, Triton 3.4.0, Transformers 5.17 and PEFT remain at Kev's locked versions. Dependencies are installed without replacing that stack. SDPA handles full attention; FLA's Triton kernels handle DeltaNet; the CUDA convolution handles its short convolution. Training uses fused AdamW, BF16 autocast, gradient checkpointing and gradient accumulation; the later-stage memory profile also bounds row passes. The LoRA/head recipe and curriculum remain in Kev's trainer.
 
 Preparation audits the actual pinned base/LoRA/head on CPU and verifies the selected optimized function bindings and CUDA/BF16 availability. It does **not** run a separate model forward/backward by default. `optimized-training-preflight.json` records `bindings_verified`, zero optimizer steps and `cuda_loss_backward='not_run'`. Every training subprocess verifies bindings again and refuses reference-kernel fallback. The first real training step exercises loss/backward/fused AdamW and saves a recovery snapshot after successful completion.
 
@@ -145,7 +144,7 @@ print('Optimized training verification:', json.dumps(runtime.training_preflight,
 
 A learner's original **0.8B** batch-8 run failed at step 2,073/3,144 with 89.90 GiB actively allocated on a 94.97 GiB GPU. Startup warnings confirmed `causal_conv1d` and `flash-linear-attention` were missing, so Qwen used reference PyTorch kernels with substantial training intermediates. The peak reached 91.91 GiB by step 280 and then stayed flat through step 2,070; that cumulative maximum alone cannot diagnose a leak. [Qwen kernel documentation](https://huggingface.co/docs/transformers/en/model_doc/qwen3_5#usage-tips-and-notes). Record counts are not physical batch sizes: records can contain multiple question rows and none-pair siblings.
 
-The default **`memory_safe`** profile uses **batch 1 × accumulation 8**, gradient checkpointing and Kev's `row_budget=2048` for all five stages. It preserves the data, epochs, optimizer-step count, architecture, learning-rate schedule and augmentation settings. Microbatching, row grouping and dropout execution differ; this is not an exact numerical reproduction. The published execution flags remain available as `TRAINING_PROFILE='published_reference'`. The smaller profile has not yet passed a GPU run. A single question longer than the row budget still runs intact; records are not silently truncated or dropped.
+The **Stage 1 cell explicitly selects batch 4 × accumulation 2 and `row_budget=0`**, matching Kev's published initial execution. This assignment happens in the training cell before the command is printed, so the generic profile and an optional benchmark suggestion cannot silently replace it. The default **`memory_safe`** profile still supplies **batch 1 × accumulation 8**, gradient checkpointing and `row_budget=2048` to later stages. Both executions preserve the data, epochs, optimizer-step count, architecture, learning-rate schedule and augmentation settings. Microbatching, row grouping and dropout execution differ; a continued run that changes these settings is not an exact numerical reproduction. The published later-stage execution flags remain available as `TRAINING_PROFILE='published_reference'`. Full-run CUDA fit and timing remain unvalidated by the course author. A single question longer than a nonzero row budget still runs intact; records are not silently truncated or dropped.
 
 Save at optimizer step 1, every 100 steps or five minutes (checked at optimizer boundaries), and the final step. Keep the latest two complete snapshots. Each contains the LoRA adapter/head, optimizer, scheduler, RNG and progress counters. Kev's native `--resume` supports full-weight runs only; the lab adds a separate LoRA recovery implementation. After a failure, set the affected stage's `RESUME_*` flag to `True`, keep the same profile, arguments, input files and output path, then rerun that stage. Do not rerun completed earlier stages. A snapshot can resume training or supply an intermediate model; it is not a completed curriculum stage.
 
@@ -161,7 +160,8 @@ if RESTORE_RECOVERY_ARCHIVE is not None:
     restore_checkpoint(RESTORE_RECOVERY_ARCHIVE, CHECKPOINT_ROOT)
 else:
     CHECKPOINT_ROOT.mkdir(parents=True, exist_ok=True)
-print('Training profile:', runtime.training_profile, 'overrides:', runtime.selected_recipe({}))
+print('Later-stage training profile:', runtime.training_profile, 'overrides:', runtime.selected_recipe({}))
+print('Stage 1 selects batch 4 x accumulation 2 / row_budget 0 in its own training cell.')
 print('Checkpoints and recovery:', CHECKPOINT_ROOT)
 """)
     md("""### Inspect a failed run / export recovery
@@ -204,7 +204,7 @@ for archive in archives:
 
 Only this stage starts fresh LoRA adapters and a pointer head over the pretrained Qwen base. It uses the selected published `experiments/q35-4b-s23.json` seed-2 recipe: all 12,576 `decision-v7` training records, two epochs, batch 4, accumulation 2, gradient checkpointing, learning rate 5e-5, rank 16 / alpha 32, a 256-dimensional head and BF16 autocast over FP32 weights. Option shuffling, none/distractor insertion and 25% none minimal pairs remain active. There is no `--init_from`.
 
-The initial cell performs this stage only. The published batch 4 × accumulation 2 is replaced by batch 1 × accumulation 8 under the default memory profile, with checkpointing and bounded row passes. It streams progress, saves recovery snapshots and writes TensorBoard curves. The full run is prework with a configurable 180-minute attempt cap, not a promised duration. To restore a completed initial checkpoint, upload its ZIP, set `RESTORE_ARCHIVE` and declare learner/instructor ownership. Use `RESUME_INITIAL=True` only when a new-style recovery snapshot exists.""")
+The initial cell performs this stage only. It explicitly sets `INITIAL_EXECUTION={'batch': 4, 'accum': 2, 'row_budget': 0}` before constructing the command; gradient checkpointing remains enabled. The generic memory profile applies to later stages. It streams progress, saves recovery snapshots and writes TensorBoard curves. The full run is prework with a configurable 180-minute attempt cap, not a promised duration. To restore a completed initial checkpoint, upload its ZIP, set `RESTORE_ARCHIVE` and declare learner/instructor ownership. To continue an earlier 1×8 run, keep the same output path and set both `RESUME_INITIAL=True` and `ALLOW_INITIAL_EXECUTION_CHANGE=True`.""")
     md("""### Optional: benchmark initial-stage throughput on your GPU
 
 Kev's published initial setup is **batch 4 × accumulation 2, gradient checkpointing, BF16 autocast over FP32 stored weights, learning rate 5e-5, two epochs and seed 2**. The recipe leaves `row_budget` at its default 0. The author reports about 56 minutes on one H100, with a 24.6 GB peak; these are not RTX PRO 6000 timing results. [Published experiment](https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/experiments/q35-4b-s23.json), [model-card compute](https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/docs/model-cards/kev-4b.md#compute).
@@ -213,19 +213,19 @@ A learner's current memory profile reported 17.74 GiB peak at step 310 and avera
 
 **If initial training is already running, wait for a `Recovery saved at optimizer step …` line, then interrupt that cell before benchmarking. Keep the runtime connected.** Copy/run the latest bootstrap and run preparation with the separate two-record check skipped. Each trial uses a new `benchmarks/initial/<attempt>` directory; it does not overwrite or resume the course checkpoint. Failed trials retain logs and the next case proceeds. Each has a ten-minute timeout, not a duration estimate. At the earlier 1.88 s/step pace, four 40-step trials would take about five minutes of training, plus loading, compilation and saving.
 
-The report selects a candidate only if it completes, uses at most 80% of the allocation's memory and beats the baseline mean step time by at least 5%. Otherwise it retains the eligible baseline or makes no selection. This is a short-sample suggestion; later records and later stages still need monitoring. Initial execution overrides do not alter the intermediate stages.
+The report suggests a candidate only if it completes, uses at most 80% of the allocation's memory and beats the baseline mean step time by at least 5%. Otherwise it suggests the eligible baseline or makes no selection. This optional diagnostic does not apply its suggestion to Stage 1. The training cell explicitly uses 4×2 / row budget 0; to try another execution, edit `INITIAL_EXECUTION` in that cell. Later records and later stages still need monitoring. Initial execution overrides do not alter the intermediate stages.
 
-To continue an interrupted initial run with the selected execution, keep the **same `INITIAL` output**, set **`RESUME_INITIAL=True` and `ALLOW_INITIAL_EXECUTION_CHANGE=True`** below. The explicit continuation permits only batch, accumulation and row-budget changes, keeps the effective batch fixed, and resumes at the same next source-record offset with the saved weights, optimizer, schedule and RNG. Data, parent/base, seed, learning rates, epochs, precision and total optimizer steps must match. The run resumes from the latest complete snapshot; work after that snapshot is repeated. Grouping and dropout draws can change, so this is a mixed execution run, not an exact numerical reproduction. Changes are recorded in recovery receipts and final run evidence. Normal resume remains strict by default.""")
+To continue an interrupted initial run at the explicit 4×2 execution, keep the **same `INITIAL` output**, set **`RESUME_INITIAL=True` and `ALLOW_INITIAL_EXECUTION_CHANGE=True`** below. These flags restore progress and permit a change; the `INITIAL_EXECUTION` assignment chooses the actual batch, accumulation and row budget. No benchmark is required. The explicit continuation permits only those three settings to change, keeps the effective batch fixed, and resumes at the same next source-record offset with the saved weights, optimizer, schedule and RNG. Data, parent/base, seed, learning rates, epochs, precision and total optimizer steps must match. The run resumes from the latest complete snapshot; work after that snapshot is repeated. Grouping and dropout draws can change, so this is a mixed execution run, not an exact numerical reproduction. Changes are recorded in recovery receipts and final run evidence. Normal resume remains strict by default.""")
     code("""RUN_INITIAL_BENCHMARK = False  # True only after stopping any current training cell
 if RUN_INITIAL_BENCHMARK:
     initial_benchmark = runtime.benchmark_initial(steps=40, warmup_steps=8)
     print(json.dumps(initial_benchmark, indent=2))
-    if initial_benchmark['selected_execution'] is None:
-        raise RuntimeError('No eligible benchmark selection; inspect the saved report/logs.')
-    runtime.initial_execution = initial_benchmark['selected_execution']
-    print('Selected initial execution:', runtime.initial_execution)
+    print('Benchmark suggestion (not applied):', initial_benchmark['selected_execution'])
 """)
     code("""INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
+INITIAL_EXECUTION = {'batch': 4, 'accum': 2, 'row_budget': 0}  # Explicit published initial execution
+runtime.initial_execution = dict(INITIAL_EXECUTION)
+print('Selected initial execution:', runtime.initial_execution, flush=True)
 print('Selected command:', runtime.pretraining_command(INITIAL), flush=True)
 RESUME_INITIAL = False  # True after interruption of this output, with recovery snapshots
 ALLOW_INITIAL_EXECUTION_CHANGE = False  # True only when resuming with changed batch/accum/row_budget
