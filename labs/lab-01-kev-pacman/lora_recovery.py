@@ -6,6 +6,7 @@ optimizer boundary and restores the pinned LoRA trainer's own counters.
 import dataclasses
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import random
@@ -15,6 +16,42 @@ import uuid
 
 COUNTERS = ("step", "seen", "tokens_seen", "peak_mem", "optimizer_seconds", "step_seconds",
             "elapsed", "start_epoch", "start_mb", "grad_norms", "run")
+EXECUTION_FLAGS = {"batch", "accum", "row_budget"}
+
+
+def execution_resume_position(saved, state, allow_change):
+    """Map a plain single-GPU plan at an optimizer boundary to its next record."""
+    old, new = saved["args"], vars(state["a"])
+    changed = {key for key in old.keys() | new.keys() if old.get(key) != new.get(key)}
+    position = dict(saved["position"])
+    if not changed:
+        return position, None
+    if not allow_change or changed - EXECUTION_FLAGS:
+        raise ValueError("Resume with the same training arguments and output directory; "
+                         "an explicit execution change permits only batch, accum and row_budget")
+    if state.get("world", 1) != 1 or any(old.get(key, 0) or new.get(key, 0)
+                                        for key in ("full_ft", "length_sort", "pass_tokens_max")):
+        raise ValueError("Execution changes require a plain single-GPU LoRA microbatch plan")
+    if any(not isinstance(args.get(key), int) or isinstance(args[key], bool) or args[key] < 1
+           for args in (old, new) for key in ("batch", "accum")):
+        raise ValueError("Execution batch and accumulation must be positive integers")
+    if old["batch"] * old["accum"] != new["batch"] * new["accum"]:
+        raise ValueError("Execution changes must preserve the effective batch")
+    if new.get("row_budget", 0) < 0:
+        raise ValueError("Row budget must be nonnegative")
+    count = len(state["reqs"])
+    old_mb = position["start_mb"]
+    old_batches = math.ceil(count / old["batch"])
+    if not 0 <= old_mb <= old_batches or (old_mb != old_batches and old_mb % old["accum"]):
+        raise ValueError("Recovery position is not an optimizer boundary")
+    offset = min(old_mb * old["batch"], count)
+    if offset < count and offset % new["batch"]:
+        raise ValueError("Execution change would repeat or skip source records")
+    position["start_mb"] = math.ceil(offset / new["batch"])
+    change = {"step": position["step"], "epoch": position["start_epoch"], "next_source_record_offset": offset,
+              "previous": {key: old.get(key, 0) for key in sorted(EXECUTION_FLAGS)},
+              "selected": {key: new.get(key, 0) for key in sorted(EXECUTION_FLAGS)}}
+    return position, change
 
 
 def latest_snapshot(root):
@@ -51,7 +88,7 @@ def _cpu_copy(value):
 
 
 class LoRARecovery:
-    def __init__(self, root=None, resume_from=None, every_steps=100, every_seconds=300):
+    def __init__(self, root=None, resume_from=None, every_steps=100, every_seconds=300, allow_execution_change=False):
         self.root = Path(root) if root else None
         self.resume_from = Path(resume_from) if resume_from else None
         self.every_steps, self.every_seconds = every_steps, every_seconds
@@ -59,6 +96,8 @@ class LoRARecovery:
             raise ValueError("Recovery intervals must be positive")
         self.saved_at = time.monotonic()
         self.backend = None
+        self.allow_execution_change = allow_execution_change
+        self.execution_history = []
 
     @property
     def resuming(self):
@@ -67,7 +106,8 @@ class LoRARecovery:
     @classmethod
     def from_env(cls):
         return cls(os.environ.get("LAB_RECOVERY_ROOT"), os.environ.get("LAB_RESUME_FROM"),
-                   int(os.environ.get("LAB_SAVE_STEPS", "100")), float(os.environ.get("LAB_SAVE_SECONDS", "300")))
+                   int(os.environ.get("LAB_SAVE_STEPS", "100")), float(os.environ.get("LAB_SAVE_SECONDS", "300")),
+                   allow_execution_change=os.environ.get("LAB_ALLOW_EXECUTION_CHANGE") == "1")
 
     def due(self, step):
         return self.root is not None and (step == 1 or step % self.every_steps == 0
@@ -97,6 +137,7 @@ class LoRARecovery:
                  "suite_sha256": state["suite_hash"], "data_sha256": _hash_file(state["a"].data) if state["a"].data else None,
                  "parameters": weights, "optimizer": _cpu_copy(state["opt"].state_dict()),
                  "scheduler": state["sched"].state_dict(), "position": counters,
+                 "execution_history": self.execution_history,
                  "torch_rng": torch.get_rng_state(), "python_rng": random.getstate(),
                  "cuda_rng": torch.cuda.get_rng_state_all() if state["dev"] == "cuda" else None}
         torch.save(saved, temporary / "recovery.pt")
@@ -111,6 +152,7 @@ class LoRARecovery:
                                               "init_source": state["init_source"], "snapshot": {"step": state["step"], "steps": state["steps"]}})
             finish_checkpoint(checkpoint, meta, state["tok"])
         receipt = {"step": state["step"], "steps": state["steps"], "directory": name,
+                   "execution_history": self.execution_history,
                    "recovery_sha256": _hash_file(temporary / "recovery.pt")}
         (temporary / "complete.json").write_text(json.dumps(receipt, indent=2) + "\n")
         destination = self.root / name
@@ -140,8 +182,9 @@ class LoRARecovery:
             raise ValueError("Recovery file checksum mismatch")
         # This is a locally generated trusted optimizer/RNG file, not a Hub model.
         saved = torch.load(path, map_location="cpu", weights_only=False)
-        if saved["version"] != 1 or saved["args"] != vars(state["a"]) or saved["steps"] != state["steps"]:
+        if saved["version"] != 1 or saved["steps"] != state["steps"]:
             raise ValueError("Resume with the same training arguments and output directory")
+        position, execution_change = execution_resume_position(saved, state, self.allow_execution_change)
         data_hash = _hash_file(state["a"].data) if state["a"].data else None
         if saved["suite_sha256"] != state["suite_hash"] or saved["data_sha256"] != data_hash:
             raise ValueError("Recovery training data differs")
@@ -163,7 +206,10 @@ class LoRARecovery:
             if state["dev"] != "cuda":
                 raise ValueError("CUDA checkpoint requires a CUDA runtime")
             torch.cuda.set_rng_state_all(saved["cuda_rng"])
-        position = saved["position"]
+        self.execution_history = list(saved.get("execution_history", []))
+        if execution_change:
+            self.execution_history.append(execution_change)
         position["run"] = Counter(position["run"])
-        print("LAB_RESUMED " + json.dumps({"step": position["step"], "steps": saved["steps"]}), flush=True)
+        print("LAB_RESUMED " + json.dumps({"step": position["step"], "steps": saved["steps"],
+                                           "execution_change": execution_change}), flush=True)
         return tuple(position[key] for key in COUNTERS)

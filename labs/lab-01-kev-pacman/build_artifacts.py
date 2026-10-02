@@ -66,6 +66,7 @@ The target GPU is an assumption for this session, not a free-compute promise. [C
 from urllib.request import urlopen
 import hashlib, json, os, sys
 TRAINING_PROFILE = 'memory_safe'  # 'published_reference' reproduces the original execution flags
+INITIAL_EXECUTION = None  # Optional benchmark-selected {'batch': 4, 'accum': 2, 'row_budget': 8192}
 LAB_DIR = Path.cwd() / 'pacman-kev-lab'
 LAB_DIR.mkdir(exist_ok=True)
 COURSE_REVISION = """ + repr(lock['revision']) + """
@@ -95,7 +96,7 @@ from pacman_lab import *
 from api_client import call, distribution
 SOURCE_HTML = (LAB_DIR / 'vendor/jev-pacman/index.html').read_text()
 MAZE = maze_from_html(SOURCE_HTML)
-runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
+runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE, initial_execution=INITIAL_EXECUTION)
 manifest = make_data(SOURCE_HTML, LAB_DIR / 'data')
 GAME = notebook_game(SOURCE_HTML, (LAB_DIR / 'games/player-controller.js').read_text(), (LAB_DIR / 'vendor/jev-pacman/LICENSE').read_text())
 STAGE_OWNERS = {}
@@ -204,19 +205,40 @@ for archive in archives:
 Only this stage starts fresh LoRA adapters and a pointer head over the pretrained Qwen base. It uses the selected published `experiments/q35-4b-s23.json` seed-2 recipe: all 12,576 `decision-v7` training records, two epochs, batch 4, accumulation 2, gradient checkpointing, learning rate 5e-5, rank 16 / alpha 32, a 256-dimensional head and BF16 autocast over FP32 weights. Option shuffling, none/distractor insertion and 25% none minimal pairs remain active. There is no `--init_from`.
 
 The initial cell performs this stage only. The published batch 4 × accumulation 2 is replaced by batch 1 × accumulation 8 under the default memory profile, with checkpointing and bounded row passes. It streams progress, saves recovery snapshots and writes TensorBoard curves. The full run is prework with a configurable 180-minute attempt cap, not a promised duration. To restore a completed initial checkpoint, upload its ZIP, set `RESTORE_ARCHIVE` and declare learner/instructor ownership. Use `RESUME_INITIAL=True` only when a new-style recovery snapshot exists.""")
+    md("""### Optional: benchmark initial-stage throughput on your GPU
+
+Kev's published initial setup is **batch 4 × accumulation 2, gradient checkpointing, BF16 autocast over FP32 stored weights, learning rate 5e-5, two epochs and seed 2**. The recipe leaves `row_budget` at its default 0. The author reports about 56 minutes on one H100, with a 24.6 GB peak; these are not RTX PRO 6000 timing results. [Published experiment](https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/experiments/q35-4b-s23.json), [model-card compute](https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/docs/model-cards/kev-4b.md#compute).
+
+A learner's current memory profile reported 17.74 GiB peak at step 310 and averaged 50.1% GPU utilization over 27 one-second samples. This suggests room to test larger microbatches; it does not identify the bottleneck or establish a speedup. The optional cell compares four executions on the same first 40 optimizer steps: `1×8 / 2048`, `2×4 / 4096`, `4×2 / 8192`, and the published `4×2 / 0` row budget. All retain checkpointing, effective batch 8, the same pinned base/suite/seed/augmentation and optimized kernels. Trials start fresh and cap their schedules at 40 steps. Exclude the first eight steps from timing; later compilation can still occur. They are timing trials, not completed initial checkpoints.
+
+**If initial training is already running, wait for a `Recovery saved at optimizer step …` line, then interrupt that cell before benchmarking. Keep the runtime connected.** Copy/run the latest bootstrap and run preparation with the separate two-record check skipped. Each trial uses a new `benchmarks/initial/<attempt>` directory; it does not overwrite or resume the course checkpoint. Failed trials retain logs and the next case proceeds. Each has a ten-minute timeout, not a duration estimate. At the earlier 1.88 s/step pace, four 40-step trials would take about five minutes of training, plus loading, compilation and saving.
+
+The report selects a candidate only if it completes, uses at most 80% of the allocation's memory and beats the baseline mean step time by at least 5%. Otherwise it retains the eligible baseline or makes no selection. This is a short-sample suggestion; later records and later stages still need monitoring. Initial execution overrides do not alter the intermediate stages.
+
+To continue an interrupted initial run with the selected execution, keep the **same `INITIAL` output**, set **`RESUME_INITIAL=True` and `ALLOW_INITIAL_EXECUTION_CHANGE=True`** below. The explicit continuation permits only batch, accumulation and row-budget changes, keeps the effective batch fixed, and resumes at the same next source-record offset with the saved weights, optimizer, schedule and RNG. Data, parent/base, seed, learning rates, epochs, precision and total optimizer steps must match. The run resumes from the latest complete snapshot; work after that snapshot is repeated. Grouping and dropout draws can change, so this is a mixed execution run, not an exact numerical reproduction. Changes are recorded in recovery receipts and final run evidence. Normal resume remains strict by default.""")
+    code("""RUN_INITIAL_BENCHMARK = False  # True only after stopping any current training cell
+if RUN_INITIAL_BENCHMARK:
+    initial_benchmark = runtime.benchmark_initial(steps=40, warmup_steps=8)
+    print(json.dumps(initial_benchmark, indent=2))
+    if initial_benchmark['selected_execution'] is None:
+        raise RuntimeError('No eligible benchmark selection; inspect the saved report/logs.')
+    runtime.initial_execution = initial_benchmark['selected_execution']
+    print('Selected initial execution:', runtime.initial_execution)
+""")
     code("""INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
 print('Selected command:', runtime.pretraining_command(INITIAL), flush=True)
 RESUME_INITIAL = False  # True after interruption of this output, with recovery snapshots
+ALLOW_INITIAL_EXECUTION_CHANGE = False  # True only when resuming with changed batch/accum/row_budget
 RESTORE_ARCHIVE = None  # Example: '/content/pacman-initial-checkpoint.zip'
 RESTORED_CHECKPOINT_OWNER = 'learner'  # 'instructor' for a supplied fallback
 if RESTORE_ARCHIVE is None:
-    runtime.pretrain(INITIAL, steps=0, resume=RESUME_INITIAL)
+    runtime.pretrain(INITIAL, steps=0, resume=RESUME_INITIAL, allow_execution_change=ALLOW_INITIAL_EXECUTION_CHANGE)
     STAGE_OWNERS['initial'] = 'learner'
 else:
     restore_checkpoint(RESTORE_ARCHIVE, INITIAL)
     STAGE_OWNERS['initial'] = RESTORED_CHECKPOINT_OWNER
 published = json.loads((runtime.repo / 'experiments/q35-4b-s23.json').read_text())[0]
-initial_config, initial_metrics = inspect_checkpoint(INITIAL, stage='initial', owner=STAGE_OWNERS['initial'], recipe=runtime.selected_recipe(published))
+initial_config, initial_metrics = inspect_checkpoint(INITIAL, stage='initial', owner=STAGE_OWNERS['initial'], recipe=runtime.selected_initial_recipe(published))
 """)
     code("""PREWORK_ARCHIVE = backup_checkpoint(INITIAL, LAB_DIR.parent / 'pacman-initial-checkpoint.zip')
 try:

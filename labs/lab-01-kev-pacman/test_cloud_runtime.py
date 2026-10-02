@@ -6,13 +6,74 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION
+from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION, select_initial_benchmark
 from training_stages import specifications
 
 ROOT = Path(__file__).resolve().parent
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def test_initial_execution_changes_only_batching_and_keeps_published_training_recipe(self):
+        recipe_file = ROOT / 'vendor/kev/experiments/q35-4b-s23.json'
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder, initial_execution={'batch': 4, 'accum': 2, 'row_budget': 8192})
+            (runtime.repo / 'experiments').mkdir(parents=True)
+            shutil.copy2(recipe_file, runtime.repo / 'experiments/q35-4b-s23.json')
+            flags = dict(zip(runtime.pretraining_command('initial')[3::2], runtime.pretraining_command('initial')[4::2]))
+            self.assertEqual([flags['--' + key] for key in ('batch', 'accum', 'row_budget')], ['4', '2', '8192'])
+            self.assertEqual(flags['--lr'], '5e-05')
+            self.assertEqual(flags['--epochs'], '2')
+            self.assertEqual(flags['--checkpointing'], '1')
+            self.assertEqual(runtime.selected_initial_recipe({'batch': 4, 'accum': 2})['row_budget'], 8192)
+            self.assertEqual(runtime.selected_recipe({'batch': 2, 'accum': 4})['batch'], 1)
+            for settings in ({'batch': 4, 'accum': 4, 'row_budget': 0}, {'batch': 4, 'accum': 2, 'row_budget': -1},
+                             {'batch': 4, 'accum': 2, 'row_budget': 0, 'lr': 0.01}):
+                with self.assertRaises(ValueError):
+                    CloudRuntime(folder, initial_execution=settings)
+            with self.assertRaisesRegex(ValueError, 'restricted'):
+                runtime.pretrain('initial', allow_execution_change=True)
+
+    def test_benchmark_excludes_warmup_keeps_production_files_and_continues_after_failure(self):
+        recipe_file = ROOT / 'vendor/kev/experiments/q35-4b-s23.json'
+        with tempfile.TemporaryDirectory() as folder, patch('cloud_runtime.print'):
+            initial_execution = {'batch': 1, 'accum': 8, 'row_budget': 2048}
+            runtime = CloudRuntime(folder, initial_execution=initial_execution)
+            runtime.gpu = {'memory_gib': 95}
+            runtime.training_preflight = {'result': 'bindings_verified'}
+            (runtime.repo / 'experiments').mkdir(parents=True)
+            shutil.copy2(recipe_file, runtime.repo / 'experiments/q35-4b-s23.json')
+            production = Path(folder) / 'checkpoints' / 'kev-4b-initial'
+            production.mkdir(parents=True)
+            (production / 'marker').write_text('preserve')
+            def trial(command, output, timeout, stage):
+                self.assertEqual(stage, 'benchmark-initial')
+                self.assertNotEqual(output, production)
+                self.assertIn('--max_steps', command)
+                if output.name == 'published-4x2':
+                    raise RuntimeError('simulated OOM')
+                output.mkdir()
+                seconds, peak = {'memory-1x8': (2, 18), 'bounded-2x4': (0.9, 30), 'bounded-4x2': (0.8, 78)}[output.name]
+                (output / 'training_metrics.json').write_text(json.dumps({
+                    'optimizer_steps': 18, 'step_seconds': [99] * 8 + [seconds] * 10, 'peak_device_bytes': peak * 2**30}))
+            with patch.object(runtime, '_train', side_effect=trial) as train:
+                report = runtime.benchmark_initial(steps=18, warmup_steps=8)
+            self.assertEqual(train.call_count, 4)
+            self.assertEqual(report['selected_name'], 'bounded-2x4')
+            self.assertAlmostEqual(report['cases'][0]['mean_step_seconds'], 2)
+            self.assertEqual(report['cases'][-1]['status'], 'failed')
+            self.assertEqual(runtime.initial_execution, initial_execution)
+            self.assertEqual((production / 'marker').read_text(), 'preserve')
+            self.assertEqual(len(list((Path(folder) / 'benchmarks').glob('initial/*/report.json'))), 1)
+
+    def test_benchmark_selection_requires_baseline_speed_gain_and_memory_headroom(self):
+        baseline = {'name': 'memory-1x8', 'status': 'completed', 'mean_step_seconds': 2, 'peak_memory_gib': 18}
+        faster = {'name': 'candidate', 'status': 'completed', 'mean_step_seconds': 1, 'peak_memory_gib': 60}
+        self.assertIs(select_initial_benchmark([baseline, faster], 95), faster)
+        self.assertIs(select_initial_benchmark([baseline, {**faster, 'mean_step_seconds': 1.95}], 95), baseline)
+        self.assertIs(select_initial_benchmark([baseline, {**faster, 'peak_memory_gib': 80}], 95), baseline)
+        self.assertIsNone(select_initial_benchmark([faster], 95))
+        self.assertIsNone(select_initial_benchmark([{**baseline, 'peak_memory_gib': 90}], 95))
+
     def test_prepare_uses_fast_bindings_by_default_and_training_check_only_on_request(self):
         for full_check in (False, True):
             with self.subTest(full_check=full_check), tempfile.TemporaryDirectory() as folder:

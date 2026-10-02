@@ -4,6 +4,7 @@ import ast
 import contextlib
 import io
 import json
+import math
 from pathlib import Path
 import random
 import tempfile
@@ -61,6 +62,111 @@ def export(folder, state):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_execution_change_in_actual_loop_preserves_records_optimizer_and_schedule(self):
+        source = Path(__file__).parent / 'vendor/kev/kev/train.py'
+        tree = instrument_trainer(source.read_text(), str(source), with_recovery=True, return_tree=True)
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'main')
+        begin = next(i for i, node in enumerate(main.body) if isinstance(node, ast.Assign)
+                     and any(isinstance(target, ast.Name) and target.id == '_lab_position' for target in node.targets))
+        end = next(i for i in range(begin, len(main.body)) if isinstance(main.body[i], ast.For))
+        loop = compile(ast.Module(body=main.body[begin:end + 1], type_ignores=[]), str(source), 'exec')
+        plan_functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                          and node.name in {'accumulation_records', 'microbatch_plan'}]
+        plan = compile(ast.Module(body=plan_functions, type_ignores=[]), str(source), 'exec')
+        class Manager(LoRARecovery):
+            stop_at = None
+            def save_if_due(self, state):
+                result = super().save_if_due(state, export)
+                if state['step'] == self.stop_at:
+                    raise InterruptedError('simulated process loss')
+                return result
+        def scope(manager, batch):
+            state = make_state()
+            state['model'][1].p = 0  # Grouping can change dropout draws; test data position/gradient equivalence independently.
+            state['a'] = SimpleNamespace(out='run', data=None, full_ft=0, epochs=2, batch=batch, accum=8 // batch,
+                                        length_sort=0, none_pair_max_state=None, pass_tokens_max=0, row_budget=2048,
+                                        shared_prefix=0, stop_after=0, save_every_steps=0, save_every_minutes=0)
+            model = state['model']
+            model.trainable_parameters = lambda: [p for p in model.parameters() if p.requires_grad]
+            observer = StepObserver()
+            observer.before_batch = lambda state: None
+            order = []
+            def encode(model, tok, args, chunk, *unused):
+                order.extend(r['id'] for r in chunk)
+                return [SimpleNamespace(row=r, share=1, tokens=4) for r in chunk]
+            def loss_fn(model, args, part, *unused):
+                losses = []
+                for variant in part:
+                    x = torch.arange(16, dtype=torch.float32).reshape(4, 4) / 16 + variant.row['id'] / 100
+                    losses.append((model(x) - 0.25).square().mean())
+                loss = sum(losses)
+                return loss, Counter(ce=float(loss.detach()))
+            state.update(torch=torch, time=time, math=math, Counter=Counter, MAX_GRAD_NORM=1.0,
+                         _lab_recovery=manager, _lab_observe=observer, rank=0, world=1,
+                         rng=random.Random(29), reqs=[{'id': i} for i in range(19)],
+                         state_tokens=None, tok=None, anchors={}, anchor_sources=None, autocast=None,
+                         snapshots=None, full_ft=SimpleNamespace(rank_share=lambda reqs, *unused: reqs), resume_seconds=[],
+                         encode_batch=encode, row_passes=lambda batch, *unused: [batch], batch_loss=loss_fn,
+                         allocated_bytes=lambda dev: 0, sync=lambda dev: None, consumed_order=order)
+            exec(plan, state)
+            return state
+        for batch in (2, 4):
+            for boundary in (2, 3, 5, 6):
+                with self.subTest(batch=batch, boundary=boundary), tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+                    baseline = scope(Manager(), 1)
+                    exec(loop, baseline)
+                    manager = Manager(folder, every_steps=1)
+                    manager.stop_at = boundary
+                    interrupted = scope(manager, 1)
+                    with self.assertRaises(InterruptedError):
+                        exec(loop, interrupted)
+                    manager = Manager(folder, resume_from=latest_snapshot(folder), allow_execution_change=True)
+                    resumed = scope(manager, batch)
+                    exec(loop, resumed)
+                    self.assertEqual(resumed['step'], 6)
+                    self.assertEqual(interrupted['consumed_order'] + resumed['consumed_order'], baseline['consumed_order'])
+                    self.assertEqual(resumed['seen'], baseline['seen'])
+                    self.assertEqual(resumed['sched'].state_dict(), baseline['sched'].state_dict())
+                    for key, value in baseline['model'].state_dict().items():
+                        torch.testing.assert_close(value, resumed['model'].state_dict()[key], rtol=1e-6, atol=1e-7)
+                    for key, expected in baseline['opt'].state_dict()['state'].items():
+                        for name, value in expected.items():
+                            torch.testing.assert_close(value, resumed['opt'].state_dict()['state'][key][name], rtol=1e-6, atol=1e-7)
+                    self.assertEqual(manager.execution_history[-1]['step'], boundary)
+                    if boundary < 6:
+                        receipt = json.loads((latest_snapshot(folder) / 'complete.json').read_text())
+                        self.assertEqual(receipt['execution_history'], manager.execution_history)
+
+    def test_execution_change_requires_opt_in_same_recipe_and_valid_boundary(self):
+        with tempfile.TemporaryDirectory() as folder, contextlib.redirect_stdout(io.StringIO()):
+            state = make_state()
+            state['a'] = SimpleNamespace(out='run', data=None, full_ft=0, batch=1, accum=8, row_budget=2048, lr=0.01)
+            advance(state, 1)
+            state['mb'] = 7
+            snapshot = LoRARecovery(folder).save_if_due(state, export)
+            def restored():
+                value = make_state()
+                value['a'] = SimpleNamespace(out='run', data=None, full_ft=0, batch=4, accum=2, row_budget=8192, lr=0.01)
+                value['reqs'] = [{}] * 19
+                return value
+            with self.assertRaisesRegex(ValueError, 'explicit execution change'):
+                LoRARecovery(resume_from=snapshot).restore(restored())
+            manager = LoRARecovery(resume_from=snapshot, allow_execution_change=True)
+            for key, value, message in [('lr', 0.02, 'same training arguments'), ('accum', 4, 'effective batch')]:
+                changed = restored()
+                setattr(changed['a'], key, value)
+                with self.assertRaisesRegex(ValueError, message):
+                    manager.restore(changed)
+            changed = restored()
+            changed['a'].length_sort = 1
+            with self.assertRaisesRegex(ValueError, 'same training arguments'):
+                manager.restore(changed)
+            payload = torch.load(snapshot / 'recovery.pt', weights_only=False)
+            payload['position']['start_mb'] = 7
+            from lora_recovery import execution_resume_position
+            with self.assertRaisesRegex(ValueError, 'optimizer boundary'):
+                execution_resume_position(payload, restored(), True)
+
     def test_pinned_training_loop_resume_replays_shuffle_without_repeating_steps(self):
         source = Path(__file__).parent / 'vendor/kev/kev/train.py'
         tree = instrument_trainer(source.read_text(), str(source), with_recovery=True, return_tree=True)

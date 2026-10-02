@@ -22,6 +22,10 @@ Kev's frozen stack uses Torch 2.8.0/CUDA 12.8, Triton 3.4.0, Transformers 5.17.0
 
 Default `TRAINING_PROFILE='memory_safe'`: batch 1 × accumulation 8, non-reentrant checkpointing, `row_budget=2048` in every stage. Source data, effective batch and schedules remain unchanged; microbatch/dropout execution and kernel arithmetic differ. The published-reference profile retains original execution flags but still requires optimized kernels. A row budget does not truncate a single longer question. Optional allocator `expandable_segments` cannot release actively used tensors.
 
+For initial-stage throughput, the optional benchmark compares memory-safe 1×8, bounded 2×4 and 4×2, and published 4×2 with no row budget. All retain gradient checkpointing. Stop any running training cell after a recovery save before running these separate 40-step trials. The first eight steps are excluded from timing; later compilation can still affect results. Selection requires a completed trial, at least 20% allocation headroom and a measured gain of at least 5% over the baseline. The report is not full-stage validation.
+
+To retain initial training progress after changing the selected execution, use the same output with `RESUME_INITIAL=True` and `ALLOW_INITIAL_EXECUTION_CHANGE=True`. Only batch/accumulation/row-budget changes are admitted, effective batch and total steps stay fixed, and recovery maps to the same next records. It restores optimizer/scheduler/RNG and logs the execution history. Grouping/dropout may change numerics. Work after the latest completed snapshot is repeated. The default strict resume and all intermediate-stage settings remain intact.
+
 This contract requires BF16 and rejects T4/P100 as drop-in training fallbacks. An explicitly allowed alternative GPU must satisfy the same software/kernel checks and receive its own full validation. Kaggle supports structured evaluation/rollouts but does not provide the Colab browser callback.
 
 ## Progress and interruption

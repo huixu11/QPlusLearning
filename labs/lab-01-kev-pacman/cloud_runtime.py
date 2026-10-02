@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -25,6 +26,39 @@ BASE_MODEL = "Qwen/Qwen3.5-4B-Base"
 BASE_REVISION = "1001bb4d826a52d1f399e183466143f4da7b741b"
 TRAINING_SUITE = "evals/v7/decision-v7"
 MEMORY_OVERRIDES = {"batch": 1, "accum": 8, "checkpointing": 1, "row_budget": 2048}
+INITIAL_BENCHMARK_CASES = [
+    ("memory-1x8", {"batch": 1, "accum": 8, "row_budget": 2048}),
+    ("bounded-2x4", {"batch": 2, "accum": 4, "row_budget": 4096}),
+    ("bounded-4x2", {"batch": 4, "accum": 2, "row_budget": 8192}),
+    ("published-4x2", {"batch": 4, "accum": 2, "row_budget": 0}),
+]
+
+
+def validate_initial_execution(execution):
+    if execution is None:
+        return None
+    if set(execution) != {"batch", "accum", "row_budget"}:
+        raise ValueError("Initial execution needs exactly batch, accum and row_budget")
+    if any(not isinstance(value, int) or isinstance(value, bool) for value in execution.values()):
+        raise ValueError("Initial execution settings must be integers")
+    if execution["batch"] < 1 or execution["accum"] < 1 or execution["row_budget"] < 0:
+        raise ValueError("Positive batch/accum and nonnegative row_budget required")
+    if execution["batch"] * execution["accum"] != 8:
+        raise ValueError("The initial execution must preserve effective batch 8")
+    return dict(execution)
+
+
+def select_initial_benchmark(cases, total_memory_gib):
+    """Require a measured speed gain and headroom; a short trial is not full validation."""
+    successful = [case for case in cases if case["status"] == "completed"]
+    baseline = next((case for case in successful if case["name"] == "memory-1x8"), None)
+    eligible = [case for case in successful if case["peak_memory_gib"] <= 0.8 * total_memory_gib]
+    if baseline is None or not eligible:
+        return None
+    fastest = min(eligible, key=lambda case: case["mean_step_seconds"])
+    if fastest["mean_step_seconds"] > baseline["mean_step_seconds"] * 0.95:
+        return baseline if baseline in eligible else None
+    return fastest
 
 GPU_PREFLIGHT = """
 import importlib.util, json, torch
@@ -65,7 +99,7 @@ def validate_gpu(info, allow_other_gpu=False):
 
 
 class CloudRuntime:
-    def __init__(self, workspace, allow_other_gpu=False, training_profile="memory_safe"):
+    def __init__(self, workspace, allow_other_gpu=False, training_profile="memory_safe", initial_execution=None):
         if training_profile not in {"memory_safe", "published_reference"}:
             raise ValueError("Choose memory_safe or published_reference training_profile")
         self.workspace = Path(workspace).resolve()
@@ -78,9 +112,13 @@ class CloudRuntime:
         self.dtype = "bf16"
         self.training_profile = training_profile
         self.training_preflight = None
+        self.initial_execution = validate_initial_execution(initial_execution)
 
     def selected_recipe(self, recipe):
         return {**recipe, **(MEMORY_OVERRIDES if self.training_profile == "memory_safe" else {})}
+
+    def selected_initial_recipe(self, recipe):
+        return {**self.selected_recipe(recipe), **(validate_initial_execution(self.initial_execution) or {})}
 
     def _profile(self, command):
         if self.training_profile == "memory_safe":
@@ -118,7 +156,7 @@ class CloudRuntime:
                    USE_HUB_KERNELS="0", LAB_REQUIRE_OPTIMIZED_KERNELS="1", LAB_FUSED_ADAMW="1")
         env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         # Recovery settings belong to one launch, never inherit another run's.
-        for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS"):
+        for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS", "LAB_ALLOW_EXECUTION_CHANGE"):
             env.pop(name, None)
         env.pop("KEV_API_KEY", None)  # this server binds only to notebook-local loopback
         return env
@@ -184,11 +222,67 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             command += ["--" + key, str(value)]
         if steps:
             command += ["--max_steps", str(steps)]
-        return self._profile(command)
+        command = self._profile(command)
+        for key, value in (validate_initial_execution(self.initial_execution) or {}).items():
+            flag = "--" + key
+            if flag in command:
+                command[command.index(flag) + 1] = str(value)
+            else:
+                command += [flag, str(value)]
+        return command
 
-    def pretrain(self, output, steps=0, timeout_minutes=180, resume=False):
+    def pretrain(self, output, steps=0, timeout_minutes=180, resume=False, allow_execution_change=False):
         """Published decision-v7 base stage, without --init_from. Full run is prework."""
-        return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial", resume=resume)
+        return self._train(self.pretraining_command(output, steps), output, timeout_minutes, "initial", resume=resume,
+                           allow_execution_change=allow_execution_change)
+
+    def benchmark_initial(self, steps=40, warmup_steps=8, timeout_minutes=10):
+        """Fresh, separate short trials. Never consume or overwrite the course checkpoint."""
+        if not isinstance(steps, int) or not isinstance(warmup_steps, int) or warmup_steps < 1 or steps < warmup_steps + 10:
+            raise ValueError("Benchmark needs warmup and at least ten measured optimizer steps")
+        if self.gpu is None:
+            raise RuntimeError("Run setup or preparation first to record the GPU allocation")
+        if self.training_preflight is None or self.training_preflight.get("result") not in {"passed", "bindings_verified"}:
+            raise RuntimeError("Run preparation first to verify the optimized bindings")
+        self.stop()
+        directory = self.workspace / "benchmarks" / "initial" / (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
+        directory.mkdir(parents=True)
+        report = {"steps_per_case": steps, "warmup_steps_excluded": warmup_steps, "gpu": self.gpu,
+                  "scope": "Initial decision-v7 stage only; first source groups, fresh weights, capped schedule; "
+                           "benchmark checkpoints are not completed curriculum stages; full-run fit unvalidated",
+                  "cases": [], "selected_execution": None}
+        previous = self.initial_execution
+        try:
+            for name, execution in INITIAL_BENCHMARK_CASES:
+                self.initial_execution = dict(execution)
+                output = directory / name
+                case = {"name": name, "execution": execution, "status": "failed"}
+                print(f"Benchmark {name}: {execution}; {steps} optimizer steps, exclude first {warmup_steps}", flush=True)
+                try:
+                    self._train(self.pretraining_command(output, steps), output, timeout_minutes, "benchmark-initial")
+                    metrics = json.loads((output / "training_metrics.json").read_text())
+                    measured = metrics["step_seconds"][warmup_steps:]
+                    if metrics["optimizer_steps"] != steps or len(measured) != steps - warmup_steps:
+                        raise RuntimeError("Incomplete benchmark metrics")
+                    if any(not isinstance(value, (int, float)) or not 0 < value < float("inf") for value in measured):
+                        raise RuntimeError("Invalid benchmark durations")
+                    case.update(status="completed", mean_step_seconds=statistics.mean(measured),
+                                median_step_seconds=statistics.median(measured),
+                                source_records_per_second=8 / statistics.mean(measured),
+                                peak_memory_gib=metrics["peak_device_bytes"] / 2**30)
+                except Exception as error:
+                    case["error"] = str(error)
+                    print(f"Benchmark {name} failed; keeping logs and trying the next case: {error}", flush=True)
+                report["cases"].append(case)
+                (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+            winner = select_initial_benchmark(report["cases"], self.gpu["memory_gib"])
+            if winner:
+                report.update(selected_execution=winner["execution"], selected_name=winner["name"])
+        finally:
+            self.initial_execution = previous
+            (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        print("Initial benchmark report: " + str(directory / "report.json"), flush=True)
+        return report
 
     def prepare_intermediate_data(self):
         code = "import sys; sys.path.insert(0, sys.argv[1]); from training_stages import prepare_data; prepare_data(sys.argv[2])"
@@ -276,7 +370,9 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         command = self.training_command(training_data, output, init_from, steps)
         return self._train(command, output, 20, "pacman", resume=resume)
 
-    def _train(self, command, output, timeout_minutes, stage, resume=False):
+    def _train(self, command, output, timeout_minutes, stage, resume=False, allow_execution_change=False):
+        if allow_execution_change and (not resume or stage != "initial"):
+            raise ValueError("Execution-change continuation is restricted to resuming the initial stage")
         output = Path(output).resolve()
         recovery_root = Path(str(output) + "-recovery")
         snapshot = latest_snapshot(recovery_root) if resume else None
@@ -300,6 +396,8 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         env.update(LAB_RECOVERY_ROOT=str(recovery_root), LAB_SAVE_STEPS="100", LAB_SAVE_SECONDS="300")
         if snapshot:
             env["LAB_RESUME_FROM"] = str(snapshot)
+        if allow_execution_change:
+            env["LAB_ALLOW_EXECUTION_CHANGE"] = "1"
         try:
             stream_training(launch, cwd=self.repo, env=env, log_dir=log_dir,
                             stage=stage, timeout_seconds=timeout_minutes * 60)
@@ -316,9 +414,20 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                     "gpu": self.gpu, "code_revision": CODE_REVISION, "observer_command": launch,
                     "training_logs": str(log_dir), "telemetry": "one sample per optimizer step",
                     "training_profile": self.training_profile, "recovery_root": str(recovery_root),
+                    "initial_execution": self.initial_execution if stage in {"initial", "benchmark-initial"} else None,
+                    "execution_change_allowed": allow_execution_change,
                     "resumed_from": str(snapshot) if snapshot else None,
                     "optimized_training_preflight": self.training_preflight,
                     "optimized_training_preflight_sha256": file_hash(report)}
+        final_snapshot = latest_snapshot(recovery_root)
+        if final_snapshot:
+            evidence["execution_history"] = json.loads((final_snapshot / "complete.json").read_text()).get("execution_history", [])
+        status_path = log_dir / "status.json"
+        if status_path.is_file():
+            resumed_status = json.loads(status_path.read_text()).get("resumed") or {}
+            change = resumed_status.get("execution_change")
+            if change and change not in evidence.get("execution_history", []):
+                evidence.setdefault("execution_history", []).append(change)
         if "--init_from" in command:
             evidence["parent_checkpoint_sha256"] = checkpoint_fingerprint(command[command.index("--init_from") + 1])
         if "--data" in command:
