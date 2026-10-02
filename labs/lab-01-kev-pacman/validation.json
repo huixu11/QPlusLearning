@@ -2,29 +2,30 @@
   "checked_at": "2026-10-02",
   "cpu_tests": {
     "result": "passed",
-    "count": 14,
-    "scope": "Game rules, dataset separation, initial/intermediate/domain commands, per-step telemetry, real TensorBoard events, process failure/timeout, checkpoint provenance and safe restore"
+    "count": 26,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore"
   },
   "notebook": {
-    "code_cells": 17,
-    "pinned_helper_files": 9,
+    "code_cells": 21,
+    "pinned_helper_files": 12,
     "syntax": "passed",
     "source_consistency": "passed",
-    "bootstrap_with_local_verified_responses": "passed"
+    "bootstrap_with_local_verified_responses": "passed",
+    "cached_bootstrap_and_helper_refresh": "passed"
   },
   "slides": {
     "count": 23,
-    "visual_qa": "All native PDF page renders inspected in the authoring workspace; exports copied unchanged",
-    "note": "Exports predate intermediate-stage notebook expansion; architecture comparison retained"
+    "visual_qa": "All 23 native PDF renders inspected after Kev-4B curriculum update; zero output issues; readback matches content; native geometry preserved",
+    "note": "Native slides and PDF/PPTX exports updated for five separate stages"
   },
-  "gpu_training": "not_run",
+  "gpu_training": "optimized_kev_4b_not_run",
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "aea5a1f32aafe4c2cc0b2c32cd409f3a8ca509441a4941371c11e7a4475ac86e",
+    "notebooks/pacman_kev_lab.ipynb": "43008dbc80c7b66c392531f30b6a5e2669e9a2b3271b031aa8250a716f6db548",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
-    "slides/pacman-lab.pdf": "eb8ad324e99157c17d1be95ebc4784b432a21482ed732c21ff73ed4b353234fa",
-    "slides/pacman-lab.pptx": "44205add96e7c9a12a6d33f34f11f6c1084c6df4bb6562475ae2e89ad200ab07"
+    "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
+    "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
   },
   "training_data": {
     "dates": {
@@ -32,11 +33,40 @@
       "sha256": "afd8502d162163605ac446439e32c7b9083302dd78a6bfdc5e30075619e98437",
       "actual_file_verified": true
     },
-    "documents_skills": {
-      "records": 16539,
-      "sha256": "1bf25e29582c11a33de334c4c3847f7cc5fe8b318ad05c6ad17162de34205950",
-      "actual_published_parts_reproduced": true
+    "documents": {
+      "records": 5219,
+      "sha256": "2d7e4c4360d642a382d55425d7f34ffa2f46d00ca39a9bae31acaf82b178ee69",
+      "actual_file_verified": true
+    },
+    "skills": {
+      "records": 11320,
+      "sha256": "14db86b947721b878f314e6ceafc858082faafe7cf17fcb11d2869f725884fa2",
+      "actual_file_verified": true,
+      "reconstruction": "Hard-v1 train then devtools-v1 train, raw-byte concatenation; same published partitions/counts, course-specific file checksum, not asserted identical to the unavailable historical round10 joint file."
     }
   },
-  "colab_tensorboard_live_ui": "not_run"
+  "colab_tensorboard_live_ui": "not_run",
+  "original_learner_run": {
+    "model": "Qwen3.5-0.8B",
+    "profile": "batch 8 \u00d7 accumulation 1, missing FLA/causal convolution",
+    "status": "oom",
+    "last_completed_optimizer_step": 2073,
+    "total_steps": 3144,
+    "gpu_total_gib": 94.97,
+    "allocated_gib_at_failure": 89.9,
+    "automatic_lora_checkpoint": "none; old notebook saved weights only at completion"
+  },
+  "optimized_cuda_loss_backward_preflight": "not_run",
+  "cuda_recovery": "not_run",
+  "kernel_wheels": {
+    "actual_downloaded_sha256_verified": true,
+    "cuda_loaded_or_compiled_locally": false,
+    "versions": {
+      "flash-linear-attention": "0.5.2",
+      "fla-core": "0.5.2",
+      "einops": "0.8.1",
+      "causal-conv1d": "1.7.0",
+      "ninja": "1.13.0"
+    }
+  }
 }
