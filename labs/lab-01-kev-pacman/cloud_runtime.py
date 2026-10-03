@@ -17,6 +17,7 @@ from training_monitor import stream_training
 from training_stages import checkpoint_fingerprint, specifications
 from lora_recovery import latest_snapshot
 from optimized_training import install_kernels, file_hash
+from checkpoint_backup import save_backup, restore_backup
 
 CODE_REVISION = "84847f0a883d900f7de5b7a57eaa341ca7f9a6b4"
 MODEL_RUN = "jaredpalmer/kev-4b@6cfce5c2fa4b4bd64026336ab649c5ca78857d52"
@@ -94,6 +95,41 @@ class CloudRuntime:
         self.training_profile = training_profile
         self.training_preflight = None
         self.initial_execution = validate_initial_execution(initial_execution)
+        self.backup_root = None
+
+    def _backup_checkpoint(self, output, snapshot):
+        config_path = Path(output) / 'training_config.json'
+        data = json.loads(config_path.read_text()).get('args', {}).get('data') if config_path.is_file() else None
+        if data and not Path(data).is_absolute():
+            data = self.repo / data
+        return save_backup(output, snapshot, self.backup_root, self.workspace, training_data=data)
+
+    def configure_backup(self, backup_root, checkpoint_root):
+        """Enable automatic archives, restore absent local outputs, back up existing ones."""
+        self.backup_root = Path(backup_root).resolve() if backup_root is not None else None
+        result = {'enabled': self.backup_root is not None, 'restored': [], 'backed_up': []}
+        if self.backup_root is None:
+            return result
+        self.backup_root.mkdir(parents=True, exist_ok=True)
+        result['backup_root'] = str(self.backup_root)
+        for name in ('kev-4b-initial', 'kev-4b-dates', 'kev-4b-documents', 'kev-4b-skills', 'kev-4b-pacman'):
+            output = Path(checkpoint_root).resolve() / name
+            restored = restore_backup(output, self.backup_root, self.workspace)
+            if restored:
+                result['restored'].append({'output': str(output), 'step': restored['step']})
+                continue
+            snapshot = latest_snapshot(Path(str(output) + '-recovery'))
+            complete = (output / 'run-evidence.json').is_file()
+            if snapshot is not None or complete:
+                pointer = self.backup_root / name / 'latest.json'
+                previous = json.loads(pointer.read_text()) if pointer.is_file() else {}
+                if (previous.get('snapshot') == (snapshot.name if snapshot else None)
+                        and previous.get('output_path') == str(output)
+                        and previous.get('completed_stage') == complete):
+                    continue
+                receipt = self._backup_checkpoint(output, snapshot)
+                result['backed_up'].append({'output': str(output), 'step': receipt['step']})
+        return result
 
     def selected_recipe(self, recipe):
         return {**recipe, **(MEMORY_OVERRIDES if self.training_profile == "memory_safe" else {})}
@@ -137,7 +173,8 @@ class CloudRuntime:
                    USE_HUB_KERNELS="0", LAB_REQUIRE_OPTIMIZED_KERNELS="1", LAB_FUSED_ADAMW="1")
         env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         # Recovery settings belong to one launch, never inherit another run's.
-        for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS", "LAB_ALLOW_EXECUTION_CHANGE"):
+        for name in ("LAB_RECOVERY_ROOT", "LAB_RESUME_FROM", "LAB_SAVE_STEPS", "LAB_SAVE_SECONDS", "LAB_ALLOW_EXECUTION_CHANGE",
+                     "LAB_BACKUP_ROOT", "LAB_BACKUP_WORKSPACE"):
             env.pop(name, None)
         env.pop("KEV_API_KEY", None)  # this server binds only to notebook-local loopback
         return env
@@ -337,6 +374,8 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         launch = [command[0], "-u", str(observer), *command[3:]]
         env = self.environment()
         env.update(LAB_RECOVERY_ROOT=str(recovery_root), LAB_SAVE_STEPS="100", LAB_SAVE_SECONDS="300")
+        if self.backup_root is not None:
+            env.update(LAB_BACKUP_ROOT=str(self.backup_root), LAB_BACKUP_WORKSPACE=str(self.workspace))
         if snapshot:
             env["LAB_RESUME_FROM"] = str(snapshot)
         if allow_execution_change:
@@ -361,7 +400,8 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                     "execution_change_allowed": allow_execution_change,
                     "resumed_from": str(snapshot) if snapshot else None,
                     "optimized_training_preflight": self.training_preflight,
-                    "optimized_training_preflight_sha256": file_hash(report)}
+                    "optimized_training_preflight_sha256": file_hash(report),
+                    "drive_backup_root": str(self.backup_root) if self.backup_root is not None else None}
         final_snapshot = latest_snapshot(recovery_root)
         if final_snapshot:
             evidence["execution_history"] = json.loads((final_snapshot / "complete.json").read_text()).get("execution_history", [])
@@ -380,5 +420,7 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         metrics = json.loads((output / "training_metrics.json").read_text())
         if metrics["optimizer_steps"] < 1:
             raise RuntimeError("Training completed without a positive optimizer step.")
+        if self.backup_root is not None:
+            self._backup_checkpoint(output, final_snapshot)
         print(f"{stage} training finished in {evidence['elapsed_seconds_including_load_save'] / 60:.1f} minutes")
         return output

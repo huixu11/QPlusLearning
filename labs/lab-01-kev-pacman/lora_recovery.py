@@ -88,7 +88,8 @@ def _cpu_copy(value):
 
 
 class LoRARecovery:
-    def __init__(self, root=None, resume_from=None, every_steps=100, every_seconds=300, allow_execution_change=False):
+    def __init__(self, root=None, resume_from=None, every_steps=100, every_seconds=300, allow_execution_change=False,
+                 backup_root=None, backup_workspace=None):
         self.root = Path(root) if root else None
         self.resume_from = Path(resume_from) if resume_from else None
         self.every_steps, self.every_seconds = every_steps, every_seconds
@@ -98,6 +99,10 @@ class LoRARecovery:
         self.backend = None
         self.allow_execution_change = allow_execution_change
         self.execution_history = []
+        self.backup_root = Path(backup_root) if backup_root else None
+        self.backup_workspace = Path(backup_workspace) if backup_workspace else None
+        if self.backup_root is not None and self.backup_workspace is None:
+            raise ValueError('Automatic backup needs the original lab workspace path')
 
     @property
     def resuming(self):
@@ -107,7 +112,8 @@ class LoRARecovery:
     def from_env(cls):
         return cls(os.environ.get("LAB_RECOVERY_ROOT"), os.environ.get("LAB_RESUME_FROM"),
                    int(os.environ.get("LAB_SAVE_STEPS", "100")), float(os.environ.get("LAB_SAVE_SECONDS", "300")),
-                   allow_execution_change=os.environ.get("LAB_ALLOW_EXECUTION_CHANGE") == "1")
+                   allow_execution_change=os.environ.get("LAB_ALLOW_EXECUTION_CHANGE") == "1",
+                   backup_root=os.environ.get('LAB_BACKUP_ROOT'), backup_workspace=os.environ.get('LAB_BACKUP_WORKSPACE'))
 
     def due(self, step):
         return self.root is not None and (step == 1 or step % self.every_steps == 0
@@ -169,6 +175,10 @@ class LoRARecovery:
                 shutil.rmtree(old)
         self.saved_at = time.monotonic()
         print(f"Recovery saved at optimizer step {state['step']}: {destination}", flush=True)
+        if self.backup_root is not None:
+            from checkpoint_backup import save_backup
+            save_backup(state['a'].out, destination, self.backup_root, self.backup_workspace,
+                        training_data=state['a'].data)
         return destination
 
     def restore(self, state):
