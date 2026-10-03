@@ -13631,8 +13631,8 @@ var labArcade = (function () {
             player: {row: pacman.tile.y, column: (pacman.tile.x + map.numCols) % map.numCols, heading: names[pacman.dirEnum]},
             ghosts: ghosts.map(function(g) { return {name: g.name, row: g.tile.y,
                 column: (g.tile.x + map.numCols) % map.numCols, heading: names[g.dirEnum],
-                mode: modes[g.mode], frightened: !!g.scared, target: {row: g.targetTile.y, column: g.targetTile.x}}; }),
-            legal_moves: legalMoves(), level: level, lives: extraLives + 1, score: getScore(),
+                mode: modes[g.mode], frightened: !!g.scared}; }),
+            legal_moves: legalMoves(), level: level, lives: extraLives + (state === newGameState ? 0 : 1), score: getScore(),
             pellets_remaining: map.dotsLeft(), frightened: energizer.isActive(),
             ghost_phase: ghostCommander.getCommand() === GHOST_CMD_SCATTER ? &#x27;scatter&#x27; : &#x27;chase&#x27;,
             fruit: fruit.isPresent() ? {name: fruit.getCurrentFruit().name, points: fruit.getPoints(),
@@ -13655,7 +13655,7 @@ var labArcade = (function () {
         remember(); return observe();
     }
     function atCenter() { return pacman.distToMid.x === 0 &amp;&amp; pacman.distToMid.y === 0; }
-    function tick() { state.update(); frames++; }
+    function tick() { if (state === playState) frames++; state.update(); }
     function setMove(direction) {
         if (legalMoves().indexOf(direction) === -1) throw new Error(&#x27;Illegal arcade player direction: &#x27; + direction);
         pacman.ai = false; pacman.setInputDir(names.indexOf(direction));
@@ -13783,7 +13783,7 @@ globalThis.labArcade = labArcade;
     });
     [&#x27;touchstart&#x27;, &#x27;touchend&#x27;, &#x27;touchmove&#x27;, &#x27;click&#x27;].forEach(function(type) {
         window.addEventListener(type, function(event) {
-            if (mode === &#x27;kev&#x27;) event.stopImmediatePropagation();
+            if (mode === &#x27;kev&#x27; || type === &#x27;click&#x27;) event.stopImmediatePropagation();
         }, true);
     });
     function frame(now) {
