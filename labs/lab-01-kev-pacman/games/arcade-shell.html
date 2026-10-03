@@ -19,9 +19,10 @@ footer{font-size:12px;margin-top:20px;color:#9fa9c6}a{color:#97bdff}details{marg
 <div class="panel"><label for="mode">Pac-Man controller</label><br><select id="mode"><option value="human">Human — arrows / WASD</option><option value="kev">Kev — active adapter</option></select><br>
 <button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="reset">New game</button>
 <div id="status" class="status" aria-live="polite">Loading the original browser engine…</div>
-<div id="stats" class="stats"></div><h3>Last model decision</h3><div id="decision">Choose Kev and press Start.</div>
+<div id="stats" class="stats"></div><div id="ghosts" class="small"></div><h3>Last model decision</h3><div id="decision">Choose Kev and press Start.</div>
 <p class="small">Click the board to use the keyboard in Human mode. Sounds start after interaction; mute this tab if needed.</p>
 <p class="small">Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing each move. Ghost speeds and timers use the original engine’s simulation clock.</p>
+<p class="small">Ghosts leave the house gradually, using pellet counters or a simulation-time timeout. Blinky chases directly; Pinky aims ahead; Inky uses Blinky’s position; Clyde retreats when close.</p>
 <p class="small">The Skills adapter has general decision training. CP3 teaches it Pac-Man. A legal move or high probability does not guarantee good play.</p></div></div>
 <footer>Classic mode from <a href="https://github.com/masonicGIT/pacman">masonicGIT/pacman</a>, pinned 7407174 (GPL-3.0). Original upstream maze, drawing, font, sounds and game mechanics. An arcade recreation with <a href="https://github.com/masonicGIT/pacman#accuracy">documented differences</a>. The model controls Pac-Man; Blinky, Pinky, Inky and Clyde use upstream code.</footer>
 </div><script>
@@ -53,7 +54,10 @@ window.addEventListener('message',async event=>{
  if(m.type==='identity')identity(m.data);
  if(m.type==='error'){status.textContent=m.data;status.className='status error';}
  if(m.type==='status'){status.textContent=m.data.message;status.className='status';}
- if(m.type==='board')document.getElementById('stats').textContent='Score '+m.data.score+' · Lives '+m.data.lives+' · Level '+m.data.level+' · Pellets '+m.data.pellets+' · Ghosts '+m.data.phase+' · Decisions '+m.data.turn+' · Visits here '+m.data.visits;
+ if(m.type==='board'){
+  document.getElementById('stats').textContent='Score '+m.data.score+' · Lives '+m.data.lives+' · Level '+m.data.level+' · Pellets '+m.data.pellets+' · Ghosts '+m.data.phase+' · Simulation '+(m.data.simulation_frames/60).toFixed(1)+'s · Decisions '+m.data.turn+' · Visits here '+m.data.visits;
+  document.getElementById('ghosts').textContent=(m.data.ghosts||[]).map(g=>g.name+': '+g.mode.replaceAll('_',' ')+(g.frightened?' (frightened)':'')).join(' · ');
+ }
  if(m.type==='decision'){
   identity(m.data.active_checkpoint);const a=m.data.answers.move;
   const panel=document.getElementById('decision');panel.replaceChildren();

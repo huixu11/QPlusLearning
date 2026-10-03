@@ -1,0 +1,148 @@
+{
+  "rollouts": [
+    {
+      "seed": 7,
+      "level": 1,
+      "turns": 223,
+      "score": 1590,
+      "dots_collected": 151,
+      "repeated_tiles": 68,
+      "outcome": "life_lost",
+      "simulation_frames": 1962,
+      "search_transitions": 0,
+      "controller": "previous_heuristic"
+    },
+    {
+      "seed": 7,
+      "level": 1,
+      "turns": 512,
+      "score": 3480,
+      "dots_collected": 232,
+      "repeated_tiles": 284,
+      "outcome": "turn_limit",
+      "simulation_frames": 4338,
+      "search_transitions": 630342,
+      "controller": "planner"
+    },
+    {
+      "seed": 1009,
+      "level": 1,
+      "turns": 360,
+      "score": 2780,
+      "dots_collected": 206,
+      "repeated_tiles": 135,
+      "outcome": "life_lost",
+      "simulation_frames": 3239,
+      "search_transitions": 0,
+      "controller": "previous_heuristic"
+    },
+    {
+      "seed": 1009,
+      "level": 1,
+      "turns": 512,
+      "score": 4350,
+      "dots_collected": 229,
+      "repeated_tiles": 270,
+      "outcome": "turn_limit",
+      "simulation_frames": 4535,
+      "search_transitions": 618604,
+      "controller": "planner"
+    },
+    {
+      "seed": 2027,
+      "level": 1,
+      "turns": 269,
+      "score": 3640,
+      "dots_collected": 192,
+      "repeated_tiles": 76,
+      "outcome": "life_lost",
+      "simulation_frames": 2691,
+      "search_transitions": 0,
+      "controller": "previous_heuristic"
+    },
+    {
+      "seed": 2027,
+      "level": 1,
+      "turns": 218,
+      "score": 3090,
+      "dots_collected": 193,
+      "repeated_tiles": 79,
+      "outcome": "life_lost",
+      "simulation_frames": 2542,
+      "search_transitions": 244110,
+      "controller": "planner"
+    },
+    {
+      "seed": 3059,
+      "level": 1,
+      "turns": 429,
+      "score": 2600,
+      "dots_collected": 244,
+      "repeated_tiles": 177,
+      "outcome": "level_cleared",
+      "simulation_frames": 3864,
+      "search_transitions": 0,
+      "controller": "previous_heuristic"
+    },
+    {
+      "seed": 3059,
+      "level": 1,
+      "turns": 512,
+      "score": 3370,
+      "dots_collected": 241,
+      "repeated_tiles": 259,
+      "outcome": "turn_limit",
+      "simulation_frames": 4523,
+      "search_transitions": 589496,
+      "controller": "planner"
+    },
+    {
+      "seed": 4099,
+      "level": 1,
+      "turns": 409,
+      "score": 2360,
+      "dots_collected": 204,
+      "repeated_tiles": 194,
+      "outcome": "life_lost",
+      "simulation_frames": 3567,
+      "search_transitions": 0,
+      "controller": "previous_heuristic"
+    },
+    {
+      "seed": 4099,
+      "level": 1,
+      "turns": 512,
+      "score": 3660,
+      "dots_collected": 230,
+      "repeated_tiles": 270,
+      "outcome": "turn_limit",
+      "simulation_frames": 4541,
+      "search_transitions": 603320,
+      "controller": "planner"
+    }
+  ],
+  "elapsed_seconds": 323.4289775409852,
+  "summary": {
+    "previous_heuristic": {
+      "episodes": 5,
+      "mean_score": 2594,
+      "mean_pellets": 199.4,
+      "mean_decisions": 338,
+      "first_life_losses": 4,
+      "level_clears": 1,
+      "turn_limits": 0
+    },
+    "planner": {
+      "episodes": 5,
+      "mean_score": 3590,
+      "mean_pellets": 225,
+      "mean_decisions": 453.2,
+      "first_life_losses": 1,
+      "level_clears": 0,
+      "turn_limits": 4
+    }
+  },
+  "scope": "CPU native-controller comparison, five fixed seeds at level 1, first life or 512-decision cap. No model inference/training. Small sample; not a win-rate estimate. Planner gets higher mean score/pellets here but clears zero levels versus one for the previous heuristic.",
+  "teacher_sha256": "f505a2b131465f0f170e16731863efe870e8549b50239f41d5a230dd57b7ff57",
+  "engine_revision": "7407174c1d6a38be8cd230577489e39e0873145b"
+}

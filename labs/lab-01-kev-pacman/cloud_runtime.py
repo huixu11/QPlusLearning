@@ -113,7 +113,7 @@ class CloudRuntime:
             return result
         self.backup_root.mkdir(parents=True, exist_ok=True)
         result['backup_root'] = str(self.backup_root)
-        for name in ('kev-4b-initial', 'kev-4b-dates', 'kev-4b-documents', 'kev-4b-skills', 'kev-4b-pacman-arcade'):
+        for name in ('kev-4b-initial', 'kev-4b-dates', 'kev-4b-documents', 'kev-4b-skills', 'kev-4b-pacman-arcade', 'kev-4b-pacman-planner-v1'):
             output = Path(checkpoint_root).resolve() / name
             restored = restore_backup(output, self.backup_root, self.workspace)
             if restored:
@@ -415,9 +415,23 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             command += ["--base_revision", meta["base_revision"]]
         return self._profile(command)
 
-    def finetune(self, training_data, output, init_from, steps=0, resume=False):
+    def finetuning_command(self, training_data, output, init_from, steps=0):
+        from planner_data import RECIPE
         command = self.training_command(training_data, output, init_from, steps)
-        return self._train(command, output, 20, "pacman", resume=resume)
+        # Pac-Man's short-context execution selection is explicit, just like
+        # Stage 1's 4 x 2 selection; long-document memory overrides stay separate.
+        for key, value in RECIPE.items():
+            flag = '--' + key
+            if flag in command:
+                command[command.index(flag)+1] = str(value)
+            else:
+                command += [flag, str(value)]
+        command += ['--suite', TRAINING_SUITE]
+        return command
+
+    def finetune(self, training_data, output, init_from, steps=0, resume=False):
+        command = self.finetuning_command(training_data, output, init_from, steps)
+        return self._train(command, output, 180, "pacman", resume=resume)
 
     def _train(self, command, output, timeout_minutes, stage, resume=False, allow_execution_change=False, resume_from=None):
         resume = resume or resume_from is not None

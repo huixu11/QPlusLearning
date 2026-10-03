@@ -4,7 +4,7 @@
 var labArcade = (function () {
     var names = ['up', 'left', 'down', 'right'];
     var modes = ['outside', 'eaten', 'going_home', 'entering_home', 'pacing_home', 'leaving_home'];
-    var seed = 7, actions = [], history = [], visits = {}, frames = 0;
+    var seed = 7, startLevel = 1, actions = [], history = [], visits = {}, frames = 0;
     var randomState = 7;
     var nativeRandom = Math.random;
     function seededRandom() {
@@ -54,7 +54,8 @@ var labArcade = (function () {
         Math.random = options.seeded === false ? nativeRandom : seededRandom;
         actions = []; history = []; visits = {}; frames = 0;
         gameMode = GAME_PACMAN; practiceMode = false; turboMode = false;
-        newGameState.setStartLevel(options.level || 1);
+        startLevel = options.level || 1;
+        newGameState.setStartLevel(startLevel);
         switchState(newGameState);
         if (options.skipReady) {
             for (var i = 0; state !== playState && i < 600; i++) state.update();
@@ -75,7 +76,12 @@ var labArcade = (function () {
         if (state === finishState || state === readyNewState) return 'level_cleared';
         return null;
     }
-    function step(direction) {
+    function replayRecord() {
+        var record = {seed: seed, actions: actions.slice()};
+        if (startLevel !== 1) record.level = startLevel;
+        return record;
+    }
+    function step(direction, quiet) {
         if (state !== playState) throw new Error('Arcade is not in play state.');
         setMove(direction);
         var moved = false, start = {x: pacman.pixel.x, y: pacman.pixel.y}, count = 0;
@@ -86,24 +92,53 @@ var labArcade = (function () {
         } while ((!moved || !atCenter()) && count < 180);
         if (!outcome() && !moved) throw new Error('The arcade player did not move.');
         finishMove();
-        return {state: observe(), outcome: outcome(), action_frames: count, replay: {seed: seed, actions: actions.slice()}};
+        return quiet ? outcome() : {state: observe(), outcome: outcome(), action_frames: count, replay: replayRecord()};
     }
     function replay(record) {
-        reset({seed: record.seed, skipReady: true});
+        reset({seed: record.seed, level: record.level || 1, skipReady: true});
         for (var i = 0; i < record.actions.length; i++) {
             var result = step(record.actions[i]);
             if (result.outcome && i !== record.actions.length - 1) throw new Error('Replay continues beyond a terminal state.');
         }
         return observe();
     }
+    // Search uses the engine's own rewind hooks for private timers, plus the
+    // fields those hooks omit. It never advances the live episode permanently.
+    function save(slot) {
+        actors.forEach(function(a) { a.save(slot); });
+        [elroyTimer, energizer, fruit, ghostCommander, ghostReleaser].forEach(function(a) { a.save(slot); });
+        saveGame(slot);
+        return {slot: slot, tiles: map.currentTiles.slice(), eaten: map.dotsEaten,
+            timeEaten: Object.assign({}, map.timeEaten), input: pacman.inputDirEnum,
+            random: randomState, frames: frames, actions: actions.slice(),
+            history: history.slice(), visits: Object.assign({}, visits)};
+    }
+    function restore(s) {
+        actors.forEach(function(a) { a.load(s.slot); });
+        [elroyTimer, energizer, fruit, ghostCommander, ghostReleaser].forEach(function(a) { a.load(s.slot); });
+        loadGame(s.slot);
+        map.currentTiles = s.tiles.slice(); map.dotsEaten = s.eaten;
+        map.timeEaten = Object.assign({}, s.timeEaten);
+        pacman.inputDirEnum = s.input;
+        randomState = s.random; frames = s.frames; actions = s.actions.slice();
+        history = s.history.slice(); visits = Object.assign({}, s.visits);
+    }
     return {reset: reset, observe: observe, legalMoves: legalMoves, atCenter: atCenter,
         tick: tick, setMove: setMove, finishMove: finishMove, outcome: outcome, step: step, replay: replay,
+        searchSave: save, searchRestore: restore,
+        searchRandom: function(value) { randomState = value || 1; },
+        searchFeatures: function() { return {pixel: {x: pacman.pixel.x, y: pacman.pixel.y},
+            row: pacman.tile.y, column: (pacman.tile.x + map.numCols) % map.numCols,
+            score: getScore(), pellets: map.dotsLeft(), tiles: map.currentTiles,
+            visits: visits, frightened: energizer.isActive(), ghosts: ghosts.map(function(g) {
+                return {row:g.tile.y, column:(g.tile.x + map.numCols) % map.numCols,
+                    danger:g.mode === GHOST_OUTSIDE && !g.scared}; })}; },
         draw: function() {
             renderer.beginFrame(); state.draw();
             if (hud.isValidState()) renderer.renderFunc(hud.draw);
             renderer.endFrame();
         }, playing: function() { return state === playState; },
-        replayRecord: function() { return {seed: seed, actions: actions.slice()}; },
+        replayRecord: replayRecord,
         headless: function() { renderer = new Proxy({}, {get: function() { return function() {}; }}); }
     };
 })();

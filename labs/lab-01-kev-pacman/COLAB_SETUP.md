@@ -14,7 +14,7 @@ If an older notebook is stuck in the two-record preflight, interrupt its cell an
 5. Complete **initial → dates/evidence → documents → skills/devtools** in the four separate prework sections. Each saves its own checkpoint and backup. Use fresh `kev-4b-*` directories: 0.8B adapters cannot initialize 4B. Keep all four ZIPs and stage curves.
 6. The notebook starts the skills checkpoint for inference. Confirm `/v1/models` and a legal player decision. Record the starting compute-unit balance for the class.
 
-The [recipe table](README.md#the-five-training-stages) lists exact source counts, replay and selected published settings. General stages use the complete published curriculum and configurable 180-minute attempt caps. These caps are scheduling limits, not measured durations. General training belongs outside the 90-minute class. The mandatory 30-minute class block fine-tunes Pac-Man for two complete epochs on 64 accepted rows: 16 optimizer steps, with a 20-minute training attempt cap.
+The [recipe table](README.md#the-five-training-stages) lists exact source counts, replay and selected settings. General training and native-engine planning-label generation belong outside the 90-minute class. Pac-Man uses **4,096 task examples plus 2,000 decision-v7 replay examples, one epoch, lr 2e-5, batch 4 × accumulation 2 / row budget 0: 762 updates**. This replaces the former 16-update demonstration. The class keeps a mandatory 30-minute fine-tuning block with a 20-minute compute target. Measure the full stage before class: at 1.5 seconds/update compute alone is 19 minutes; at 3 seconds it is 38 minutes. Complete slower full runs as prework. All full-stage attempt caps are 180 minutes, scheduling limits rather than measured durations; no automatic short-step truncation is used.
 
 ## Optimized execution and precision
 
@@ -44,6 +44,6 @@ Sources: [Colab FAQ](https://research.google.com/colaboratory/faq.html), [RTX PR
 
 ## Classic Pac-Man update
 
-Use the new bootstrap and CP0–CP5 cells. On an existing runtime rerun bootstrap, **Load completed Skills checkpoint — start the lab here**, then CP0. On a fresh runtime run setup, optimized preparation and Drive storage first. Keep the completed Skills baseline. CP3 writes `kev-4b-pacman-arcade`, with new `pacman-arcade-*` data and a 4,096-token state budget. The badge identifies the actual live adapter and hashes.
+Use the new bootstrap and CP0–CP5 cells. On an existing runtime rerun bootstrap, **Load completed Skills checkpoint — start the lab here**, then CP0. On a fresh runtime run setup, optimized preparation and Drive storage first. Keep the completed Skills baseline. CP3 writes `kev-4b-pacman-planner-v1`, with new `pacman-planner-v1-*` data and a 4,096-token state budget. It prints the exact 4 × 2 command and automatically resumes matching recovery. The badge identifies the actual live adapter and hashes. With `SAVE_TO_DRIVE=True`, this new checkpoint uses the same automatic step-1 / periodic / final backup flow.
 
 Node.js executes the same pinned four-ghost engine for CPU evaluation. Setup uses an installed Node 18+ or a checksum-pinned official Node 22.17.0 binary. The native renderer, font, sounds and classic mechanisms are included. Human play uses 60 simulation frames per second; Kev pauses simulation time while deciding.

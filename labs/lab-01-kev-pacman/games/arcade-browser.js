@@ -104,7 +104,8 @@
             var observation = labArcade.observe();
             post('board', {score: observation.score, lives: observation.lives, level: observation.level,
                 pellets: observation.pellets_remaining, phase: observation.ghost_phase,
-                visits: observation.visits_to_current_tile, turn: observation.turn});
+                visits: observation.visits_to_current_tile, turn: observation.turn,
+                simulation_frames: observation.simulation_frames, ghosts: observation.ghosts});
             lastStatus = now;
         }
         requestAnimationFrame(frame);

@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parent
 HELPERS = ["api_client.py", "pacman_lab.py", "cloud_runtime.py", "training_monitor.py",
            "lora_recovery.py", "checkpoint_backup.py", "optimized_training.py", "training-kernels.json", "training_stages.py", "training-stages.json", "games/arcade-engine.js", "games/arcade-worker.js", "games/arcade-browser.js", "games/arcade-shell.html",
            "vendor/arcade-pacman/source.json", "vendor/arcade-pacman/source.zip",
-           "data/pacman-arcade-train.jsonl", "data/pacman-arcade-development.jsonl", "data/pacman-arcade-evaluation.jsonl", "data/pacman-arcade-manifest.json"]
+           "planner_data.py", "games/arcade-planner.js", "data/pacman-planner-v1.zip",
+           "data/pacman-planner-v1-manifest.json", "data/pacman-planner-v1-quality.json"]
 
 
 def source_lock(pin=False):
@@ -87,12 +88,13 @@ if 'runtime' in globals():
     runtime.stop()
 import importlib
 importlib.invalidate_caches()
-for name in ['cloud_runtime', 'training_monitor', 'lora_recovery', 'checkpoint_backup', 'optimized_training', 'training_stages', 'pacman_lab', 'api_client']:
+for name in ['cloud_runtime', 'training_monitor', 'lora_recovery', 'checkpoint_backup', 'optimized_training', 'training_stages', 'planner_data', 'pacman_lab', 'api_client']:
     sys.modules.pop(name, None)
 from cloud_runtime import CloudRuntime
 from lora_recovery import latest_snapshot
 from training_stages import specifications, inspect_checkpoint, restore_checkpoint, backup_checkpoint
 from pacman_lab import *
+from planner_data import prepare_dataset, planner_rollout, PREFIX, RECIPE
 from api_client import call, distribution
 ensure_node(LAB_DIR)
 runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
@@ -102,12 +104,12 @@ DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
 DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
 SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
 STAGES = specifications()
-manifest = json.loads((LAB_DIR / 'data/pacman-arcade-manifest.json').read_text())
+manifest = prepare_dataset(LAB_DIR / 'data')
 GAME = notebook_game()
 STAGE_OWNERS = {}
 print('Prepared classic arcade engine, four ghosts and episode-disjoint player snapshots.')
 """)
-    md("""Setup fetches readable helpers, four starter-data files and a 9.7 MB archive of original game source/assets, verifying every SHA-256. Node.js executes that same engine for Python evaluation; Colab installs a checksum-pinned official Node binary only if needed, separate from Torch. Cached downloads are reused. Network access is needed on first use.
+    md("""Setup fetches readable helpers, a compressed planning dataset and a 9.7 MB archive of original game source/assets, verifying every SHA-256. It extracts the three declared dataset files after checking their individual hashes. The instructor generates planning labels before class; learners do not spend the training block generating demonstrations. Node.js executes that same engine for Python evaluation; Colab installs a checksum-pinned official Node binary only if needed, separate from Torch. Cached downloads are reused. Network access is needed on first use.
 
 ## Training monitor: open TensorBoard before running any stage
 
@@ -397,7 +399,7 @@ Kev's release fitted one probability temperature after its four training stages.
 
 Try **Human** mode with arrows/WASD; click the board for keyboard focus. Restart, select **Kev**, and watch its choices. Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing a direction at each tile center, then player and all four ghosts advance using upstream speeds/timers. Wall-clock survival is not a fair skill metric. Pause before running training cells.
 
-The **Active LoRA + pointer head** badge should show `kev-4b-skills` at CP0: general Skills training, no Pac-Man fine-tuning. CP4 loads `kev-4b-pacman-arcade`. Expand the details for paths and SHA-256 fingerprints. The badge and traces verify the serving model card; `kev-latest` alone is an API alias.
+The **Active LoRA + pointer head** badge should show `kev-4b-skills` at CP0: general Skills training, no Pac-Man fine-tuning. CP4 loads `kev-4b-pacman-planner-v1`. Expand the details for paths and SHA-256 fingerprints. The badge and traces verify the serving model card; `kev-latest` alone is an API alias.
 
 Colab supplies the notebook callback below. On Kaggle, use the structured decision cell and Python rollouts instead. API errors pause visibly; the game does not replace failed player decisions with a hidden rules controller.""")
     code("""from IPython.display import display, HTML, JSON
@@ -426,17 +428,21 @@ print(json.dumps(response['answers'], indent=2), '\\nHTTP ms:', round(elapsed))
 """)
     md("""## CP2: inspect and edit labels (20–30 minutes)
 
-Starter data has **64 training, 16 development, 16 evaluation** snapshots from valid seeded trajectories in the same engine. Labels use a transparent heuristic: avoid nearby dangerous ghosts, approach pellets by maze distance, penalize recently repeated tiles, prefer ghost separation, then fixed direction ties. These are synthetic imitation labels, not recorded human expertise. `_meta.replay` reconstructs exact engine state for evaluation and is excluded from model input.
+Data has **4,096 training, 256 development and 256 evaluation** snapshots from valid native-engine trajectories, starting at levels 1, 2, 3 and 5. At every labelled board, the teacher simulates up to **20 future player moves** for every legal first action, retaining **eight paths per first action** under **two independent frightened-mode randomness scenarios**. Chase/scatter movement is predicted from each ghost's deterministic native targeting rule, rather than a random walk. Native code handles speeds, timers, release counters, collisions, power pellets, fruit and score.
 
-Inspect three training boards and enter your own legal move labels in `EDITS` before checking the teacher. Keep all edits in the training partition. Fix the training file and one candidate before opening evaluation data. Whole episodes and observable snapshots are disjoint across splits; every split uses the classic maze. New `pacman-arcade-*` files preserve earlier simplified-game labels. Train a fresh Pac-Man adapter from Skills for this game.""")
-    code("""training_file = LAB_DIR / 'data/pacman-arcade-train-reviewed.jsonl'
-label_source = training_file if training_file.is_file() else LAB_DIR / 'data/pacman-arcade-train.jsonl'
+The objective ranks worst-scenario survival first, then mean `score gained + 5 × pellets collected − 4 × repeat visits − 6 × distance to the next pellet + 2 × min(dangerous-ghost distance, 8)`. The stored candidates show the best sequence found for each direction. **Beam pruning and the finite horizon mean this is an approximate planning teacher, not a globally optimal full-game solver.** The teacher uses current native timers/pixel offsets; the learner sees board, modes, history and elapsed frames, so this is privileged-state imitation. The teacher resamples future RNG rather than looking ahead at the actual episode RNG. Search sequences, labels, replay seeds and scores stay in `_meta`, outside model inputs.
+
+Collection uses 70% planning, 20% the earlier heuristic and 10% random legal moves to include recovery states. Snapshots are spaced four moves apart. Whole episodes and exact observable snapshots are disjoint across splits; all use the classic maze. Inspect the manifest's episode counts, action balance, four-ghost, frightened, fruit and junction coverage, and the CPU teacher-comparison report.
+
+Inspect three training boards and enter your own legal move labels in `EDITS` before checking the teacher. Keep all edits in the training partition. Fix the training file and one candidate before opening evaluation data. The versioned planner files and checkpoint preserve earlier heuristic experiments. Warm-start this candidate from Skills.""")
+    code("""training_file = LAB_DIR / 'data/pacman-planner-v1-train-reviewed.jsonl'
+label_source = training_file if training_file.is_file() else LAB_DIR / 'data/pacman-planner-v1-train.jsonl'
 training = [json.loads(line) for line in label_source.read_text().splitlines()]
 print('Training labels:', label_source)
 for row in training[:3]:
     print(row['_meta']['id'], json.dumps(row['state'], indent=2))
     print('Legal:', list(row['questions']['move']['criteria']))
-EDITS = {}  # Example after inspecting a board: {'train-board-000': 'left'}
+EDITS = {}  # Example after inspecting a board: {'train-board-0000': 'left'}
 assert set(EDITS).issubset({r['_meta']['id'] for r in training}), 'Unknown training board ID'
 for row in training:
     if row['_meta']['id'] in EDITS:
@@ -447,21 +453,28 @@ for row in training:
 if EDITS or not training_file.is_file():
     training_file.write_text(''.join(json.dumps(row) + '\\n' for row in training))
 print('Teacher labels for inspected boards:', [(r['_meta']['id'], r['questions']['move']['label']) for r in training[:3]])
+print('Search alternatives:', training[0]['_meta'].get('teacher', {}).get('candidates', []))
 print('Split sizes:', manifest['counts'])
-before_dev = evaluate(LAB_DIR / 'data/pacman-arcade-development.jsonl')
+print('Coverage:', manifest['coverage'])
+print('CPU teacher comparison:', json.loads((LAB_DIR / 'data/pacman-planner-v1-quality.json').read_text())['summary'])
+before_dev = evaluate(LAB_DIR / 'data/pacman-planner-v1-development.jsonl')
 print('Development accuracy:', before_dev['accuracy'])
 """)
     md("""## Stage 5 / CP3: fine-tune Pac-Man decisions (30–60 minutes)
 
-30-minute block: 5 minutes inspect a labelled request and the loss; up to 20 minutes fine-tune for **two complete epochs**; 5 minutes inspect and save the checkpoint. This is supervised imitation. Kev updates its LoRA adapter and pointer head while the original base matrices remain frozen; the adapter changes the encoder's effective features.
+30-minute block: 5 minutes inspect a labelled request and the loss; target up to 20 minutes training; 5 minutes inspect and save the checkpoint. This is supervised imitation. Kev updates the same all-module rank-16 LoRA adapters and 256-dimensional pointer head as the preceding stages; original base matrices stay frozen. Planning happens only when producing labels, not inside the training loss or the model controller.
 
-Warm-start from **your Stage 4 skills/devtools checkpoint**, using Kev's documented custom-data settings: learning rate 2e-5, batch 1, accumulation 8, BF16 autocast and gradient checkpointing. With 64 accepted rows, this gives 16 optimizer steps. The Pac-Man adaptation disables none/distractor insertion because the only valid outputs are legal player moves. Option shuffling remains active. This is a documented task-specific departure from the generic initial recipe.
+Warm-start from **your Stage 4 Skills checkpoint**. Following the intermediate-stage pattern, train **one complete epoch**, learning rate **2e-5**, with **2,000 decision-v7 training examples mixed as replay**. There are **6,096 requests / 762 optimizer updates**, versus the old 64-board exercise's 16 updates. Dates used 3,425 requests / 429 updates; Documents 7,219 / 903; Skills 15,320 / 1,915. More labels provide a substantive adaptation experiment; improved play must still be measured.
 
-The helper reads architecture from the checkpoint and stops inference to free GPU memory. Use a new checkpoint directory. The classic board uses a 4,096-token state budget rather than the earlier simplified board's 2,048; truncation/rejected records fail the stage audit. A timed GPU preflight is still required; CPU checks do not establish improved play.""")
+For the target 96 GB GPU this stage explicitly uses **batch 4 × accumulation 2, row budget 0**, BF16 autocast, FP32 stored weights, optimized FLA/conv kernels, fused AdamW and gradient checkpointing. The effective batch stays eight. The printed command is authoritative. None/distractor and none-pair augmentation are disabled for this mixed task stage, because the Pac-Man output must remain a legal move. Generic replay retains its recorded labels; option shuffling stays active. These task/execution choices depart from the generic augmentation settings.
+
+The helper reads architecture from the checkpoint and stops inference to free GPU memory. The state budget is 4,096 tokens; truncation/rejected records fail the audit. Existing recovery and Drive backup apply. The full stage has no short-step cap and may exceed the classroom block: at 1.5 seconds/update, compute alone is 19 minutes; at 3 seconds/update, 38 minutes. Measure steady step time before class and complete a slower full run as prework. CPU checks do not establish GPU timing, memory fit or trained-model improvement.""")
     code("""print(json.dumps(training[0], indent=2))
-CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman-arcade'
+CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman-planner-v1'
 from lora_recovery import latest_snapshot
 RESUME_PACMAN = latest_snapshot(Path(str(CHECKPOINT) + '-recovery')) is not None
+print('Pac-Man recipe:', RECIPE)
+print('Selected Pac-Man command:', runtime.finetuning_command(training_file, CHECKPOINT, GENERAL))
 if (CHECKPOINT / 'run-evidence.json').is_file():
     evidence = json.loads((CHECKPOINT / 'run-evidence.json').read_text())
     assert evidence['training_data_sha256'] == hashlib.sha256(training_file.read_bytes()).hexdigest(), 'Saved checkpoint used different labels; select a new checkpoint output to retrain.'
@@ -471,40 +484,40 @@ else:
     checkpoint = runtime.finetune(training_file, CHECKPOINT, init_from=GENERAL, steps=0, resume=RESUME_PACMAN)
 metrics = json.loads((checkpoint / 'training_metrics.json').read_text())
 print(metrics)
-assert metrics['optimizer_steps'] == 16, 'Complete the 64-record, two-epoch Pac-Man stage'
+assert len(training) == manifest['counts']['train'], 'Preserve the complete training partition'
+saved_recipe = json.loads((checkpoint / 'training_config.json').read_text())['args']
+for key, value in RECIPE.items():
+    assert saved_recipe[key] == (float(value) if key == 'lr' else value), f'Checkpoint used another recipe: {key}'
+assert metrics['optimizer_steps'] == manifest['expected_optimizer_steps'], 'Complete the full planner/replay stage'
 assert not metrics.get('truncated_records', 0) and not metrics.get('rejected_records', 0), 'No state truncation or dropped records'
-assert metrics['records_seen'] == metrics['requested_records'], 'Complete both epochs'
+assert metrics['records_seen'] == metrics['requested_records'] == manifest['expected_training_requests'], 'Complete one epoch including replay'
 """)
     md("""## CP4: before/after on the same decisions (60–72 minutes)
 
-The candidate is now fixed. Score both models on the same 16 evaluation snapshots and save predictions by ID. Report accuracy against the teacher and immediate captures after the selected moves. Sixteen boards on one maze do not establish general game skill. Fine-tuning may leave answers unchanged or make them worse.""")
+The candidate is now fixed. Score both models on the same **256 evaluation snapshots** and save predictions by ID. Report strict and tie-aware teacher agreement, lower search-survival choices, search-value regret within the same survival class, and immediate captures. These are comparisons with an approximate teacher, not full-game win rates. Fine-tuning may leave answers unchanged or make them worse.""")
     code("""runtime.start(GENERAL)
-before = evaluate(LAB_DIR / 'data/pacman-arcade-evaluation.jsonl')
+before = evaluate(LAB_DIR / 'data/pacman-planner-v1-evaluation.jsonl')
 before_identity = runtime.active_model_info()
 before_run = rollout(max_turns=128)
 runtime.start(checkpoint)
-after = evaluate(LAB_DIR / 'data/pacman-arcade-evaluation.jsonl')
+after = evaluate(LAB_DIR / 'data/pacman-planner-v1-evaluation.jsonl')
 after_identity = runtime.active_model_info()
 after_run = rollout(max_turns=128)
 comparison = {'base_model': audit['base'], 'base_revision': audit['base_revision'], 'baseline_checkpoint': str(GENERAL), 'checkpoint_owners': STAGE_OWNERS, 'fine_tuned_checkpoint': str(checkpoint), 'active_adapters': {'before': before_identity, 'after': after_identity}, 'before': before, 'after': after, 'rollouts': {'general': before_run, 'fine_tuned': after_run}, 'general_training_stages': stage_metrics, 'missing_general_stage_archives': missing_stage_archives, 'pacman_training': metrics, 'runtime': runtime.gpu}
+comparison['pacman_dataset'] = manifest
 (LAB_DIR / 'comparison.json').write_text(json.dumps(comparison, indent=2))
 for name, result in [('general', before), ('fine_tuned', after)]:
-    print(name, 'accuracy', result['accuracy'], 'immediate captures', result['caught_next_turn'])
+    print(name, {key:result[key] for key in ['accuracy', 'tie_aware_teacher_accuracy', 'lower_search_survival_choices', 'mean_same_survival_search_regret', 'caught_next_turn']})
 """)
     md("""## CP4 continued: watch Pac-Man play (72–80 minutes)
 
-Repeat CP0's browser cell, choose **Kev**, and start a new game. Confirm the badge says `kev-4b-pacman-arcade`, Pac-Man fine-tuned. Both Python rollouts use the same starting board, seed, original engine and 128-decision cap, stopping at the first lost life or completed level. The browser retains all three lives and level progression. Compare score, pellets, repeated tiles and decisions; these trajectories illustrate behavior, not a win-rate estimate.
+Repeat CP0's browser cell, choose **Kev**, and start a new game. Confirm the badge says `kev-4b-pacman-planner-v1`, Pac-Man fine-tuned. Both Python rollouts use the same starting board, seed, original engine and 128-decision cap, stopping at the first lost life or completed level. The browser retains all three lives and level progression. Compare score, pellets, repeated tiles and decisions; these trajectories illustrate behavior, not a win-rate estimate.
 
-The starter teacher is also a useful rules baseline. It is deliberately simple and can get stuck. The model learns from structured state; there is no screenshot encoder or frame-by-frame RL training in this exercise.""")
+Compare with the planning controller below and the archived five-seed CPU comparison with the old heuristic. The teacher itself can fail. The model learns from structured state; there is no screenshot encoder or frame-by-frame RL training in this exercise.""")
     code("""for name, episode in [('general', before_run), ('fine_tuned', after_run)]:
     print(name, {k:episode[k] for k in ['turns', 'dots_collected', 'score', 'repeated_tiles', 'outcome']})
-# Optional rules baseline using the same game mechanics:
-def rule_predict(request):
-    chosen = teacher(request['state'])
-    keys = request['questions']['move']['criteria']
-    return {'answers': {'move': {'choice':chosen, 'probabilities':{k:float(k==chosen) for k in keys}}}}
-rule_run = rollout(predict=rule_predict, max_turns=128)
-print('rules', {k:rule_run[k] for k in ['turns','dots_collected','score','repeated_tiles','outcome']})
+rule_run = planner_rollout(turns=128)
+print('planning teacher', rule_run)
 """)
     md("""## CP5: explain and submit (80–90 minutes)
 
@@ -517,7 +530,7 @@ print('Unavailable earlier stage archives:', missing_stage_archives)
 # Export small adapters/heads and results, without foundation weights or packages.
 import zipfile
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as out:
-    for file in [LAB_DIR/'comparison.json', training_file, LAB_DIR/'runtime-preflight.json', LAB_DIR/'optimized-training-preflight.json', LAB_DIR/'trainable-parameters.json']:
+    for file in [LAB_DIR/'comparison.json', training_file, LAB_DIR/'data/pacman-planner-v1-manifest.json', LAB_DIR/'data/pacman-planner-v1-quality.json', LAB_DIR/'runtime-preflight.json', LAB_DIR/'optimized-training-preflight.json', LAB_DIR/'trainable-parameters.json']:
         out.write(file, file.relative_to(LAB_DIR))
     for folder in [INITIAL, DATES, DOCUMENTS, SKILLS, checkpoint]:
         for file in folder.rglob('*'):

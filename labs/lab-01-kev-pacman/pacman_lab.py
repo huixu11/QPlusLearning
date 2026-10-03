@@ -27,6 +27,13 @@ POLICY = ('Control Pac-Man in classic arcade Pac-Man. Collect pellets and fruit,
           'follow the arcade engine. Prefer uncollected pellets reachable by safe maze '
           'paths; avoid repeatedly revisiting the same tiles or reversing without progress. '
           'Use the recent positions, ghost modes and legal moves. Select one supplied direction.')
+PLANNER_POLICY = (POLICY + ' In chase mode, Blinky targets your current tile; Pinky aims four tiles '
+                  'ahead; Inky reflects a two-tile-ahead point around Blinky; Clyde chases from '
+                  'far away and retreats to his corner when close. Upward targeting includes '
+                  'the classic leftward offset. In scatter mode ghosts target their own corners. '
+                  'Normal ghost targeting is deterministic; frightened turns can vary. '
+                  'Ghosts leave home gradually using pellet counters and simulation time. '
+                  'Anticipate future collisions and power-pellet opportunities, not just current proximity.')
 DIRECTIONS = {'up': (-1, 0), 'left': (0, -1), 'down': (1, 0), 'right': (0, 1)}
 DATA_PREFIX = 'pacman-arcade'
 
@@ -154,12 +161,12 @@ def initial_state():
         return engine.reset()
 
 
-def body(state):
+def body(state, instructions=PLANNER_POLICY):
     criteria = {d: f'Move {d} toward row {destination(state["maze"], position(state["player"]), d)[0]}, '
                    f'column {destination(state["maze"], position(state["player"]), d)[1]}.'
                 for d in state['legal_moves']}
     return {'state': state, 'model': 'kev-latest', 'questions': {'move': {
-        'type': 'choice', 'instructions': POLICY, 'criteria': criteria}}}
+        'type': 'choice', 'instructions': instructions, 'criteria': criteria}}}
 
 
 def teacher(state):
@@ -195,7 +202,7 @@ def make_data(directory, counts=(64, 16, 16), seed=7):
                     chosen = teacher(state)
                     fingerprint = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
                     if turn >= 12 and len(state['legal_moves']) >= 2 and fingerprint not in fingerprints and turn % 12 == 0:
-                        request = body(state)
+                        request = body(state, instructions=POLICY)
                         request.pop('model')
                         request['questions']['move'].update(label=chosen, src='pacman_teacher')
                         request['_meta'] = {'id': f'{split}-board-{len(rows):03d}', 'group_id': group,
@@ -239,14 +246,28 @@ def evaluate(path, predict=None):
             answer = response['answers']['move']
             distribution(answer, record['questions']['move']['criteria'])
             result = engine.step(answer['choice'])
-            rows.append({'id': record['_meta']['id'], 'gold': record['questions']['move']['label'],
+            row = {'id': record['_meta']['id'], 'gold': record['questions']['move']['label'],
                          'prediction': answer['choice'], 'probabilities': answer['probabilities'],
                          'caught_next_turn': result['outcome'] == 'life_lost',
-                         'http_ms': (time.perf_counter() - started) * 1000})
+                         'http_ms': (time.perf_counter() - started) * 1000}
+            if 'teacher' in record['_meta']:
+                candidates = record['_meta']['teacher']['candidates']
+                best, selected = candidates[0], next(c for c in candidates if c['action'] == answer['choice'])
+                row['teacher_tie_correct'] = (selected['survival'], selected['value']) == (best['survival'], best['value'])
+                row['lower_search_survival'] = selected['survival'] < best['survival']
+                row['search_value_regret'] = max(0, best['value']-selected['value']) if selected['survival'] == best['survival'] else None
+            rows.append(row)
     if not rows:
         raise ValueError('No labelled decisions to evaluate')
-    return {'n': len(rows), 'accuracy': sum(r['gold'] == r['prediction'] for r in rows) / len(rows),
-            'caught_next_turn': sum(r['caught_next_turn'] for r in rows), 'rows': rows, 'engine_revision': PACMAN_REVISION}
+    result = {'n': len(rows), 'accuracy': sum(r['gold'] == r['prediction'] for r in rows) / len(rows),
+              'caught_next_turn': sum(r['caught_next_turn'] for r in rows), 'rows': rows, 'engine_revision': PACMAN_REVISION}
+    planned = [r for r in rows if 'teacher_tie_correct' in r]
+    if planned:
+        regrets = [r['search_value_regret'] for r in planned if r['search_value_regret'] is not None]
+        result.update(tie_aware_teacher_accuracy=sum(r['teacher_tie_correct'] for r in planned)/len(planned),
+                      lower_search_survival_choices=sum(r['lower_search_survival'] for r in planned),
+                      mean_same_survival_search_regret=sum(regrets)/len(regrets) if regrets else None)
+    return result
 
 
 def rollout(predict=None, max_turns=128, seed=7):

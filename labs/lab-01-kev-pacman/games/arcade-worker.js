@@ -7,6 +7,7 @@ const context = {console: {log() {}, error() {}}, Audio, localStorage: {},
     setTimeout() {}, clearTimeout() {}, setInterval() {}, clearInterval() {},
     requestAnimationFrame() {}, cancelAnimationFrame() {}};
 vm.createContext(context); vm.runInContext(script, context); context.labArcade.headless();
+let plan;
 readline.createInterface({input: process.stdin}).on('line', line => {
     try {
         const input = JSON.parse(line), api = context.labArcade;
@@ -16,6 +17,13 @@ readline.createInterface({input: process.stdin}).on('line', line => {
         else if (input.command === 'step') result = api.step(input.direction);
         else if (input.command === 'replay') result = api.replay(input.replay);
         else if (input.command === 'transition') { api.replay(input.replay); result = api.step(input.direction); }
+        else if (input.command === 'plan') {
+            if (!plan) {
+                vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, 'arcade-planner.js'), 'utf8'), context);
+                plan = context.createArcadePlanner(api);
+            }
+            result = plan(input.options);
+        }
         else throw new Error('Unknown engine command');
         process.stdout.write(JSON.stringify({result}) + '\n');
     } catch (error) { process.stdout.write(JSON.stringify({error: String(error.stack || error)}) + '\n'); }
