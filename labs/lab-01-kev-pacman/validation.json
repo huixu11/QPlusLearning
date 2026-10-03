@@ -2,12 +2,12 @@
   "checked_at": "2026-10-03",
   "cpu_tests": {
     "result": "passed",
-    "count": 59,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction; missing/cached/corrupt intermediate-data admission before training launch; failed-download rejection; preserved empty unstarted output retry; recovery-directory protection; actual notebook documents-to-skills continuation from completed dates without Stage 1/2 variables or recovery, using fixture data and a mocked GPU subprocess; standalone Skills-only notebook startup with absent earlier variables, learner/instructor ownership, no training or recovery import, and partial/missing/wrong-stage rejection; actual pinned classic Pac-Man map, four ghosts, 244 pellets/four power pellets, lives/scoring, native frightened/tunnel mechanisms, all 96 seeded snapshots replayed exactly, disjoint episodes/snapshots, shared browser/CPU physics parity, controller simulation freeze while awaiting inference, stale-reset rejection, API-error pause, adapter identity trace/switch guards, live-model-card validation and requested-run fallback rejection"
+    "count": 64,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction; missing/cached/corrupt intermediate-data admission before training launch; failed-download rejection; preserved empty unstarted output retry; recovery-directory protection; actual notebook documents-to-skills continuation from completed dates without Stage 1/2 variables or recovery, using fixture data and a mocked GPU subprocess; standalone Skills-only notebook startup with absent earlier variables, learner/instructor ownership, no training or recovery import, and partial/missing/wrong-stage rejection; actual pinned classic Pac-Man map, four ghosts, 244 pellets/four power pellets, lives/scoring, native frightened/tunnel mechanisms, all 96 seeded snapshots replayed exactly, disjoint episodes/snapshots, shared browser/CPU physics parity, controller simulation freeze while awaiting inference, stale-reset rejection, API-error pause, adapter identity trace/switch guards, live-model-card validation and requested-run fallback rejection; native planner restores private timers and episode RNG, short exhaustive search matches independent replay enumeration, gradual release puts all ghosts outside, all 4,608 task labels are legal with disjoint episodes/states and metadata excluded, task recipe uses rank-16/head-256 and explicit 4x2/replay/one epoch"
   },
   "notebook": {
     "code_cells": 23,
-    "pinned_helper_files": 20,
+    "pinned_helper_files": 21,
     "syntax": "passed",
     "source_consistency": "passed",
     "bootstrap_with_local_verified_responses": "passed",
@@ -32,21 +32,56 @@
     "completed_dates_continuation": "passed on CPU: actual Documents/Skills/export cells, actual CloudRuntime commands and checkpoint inspection, verified fixture data, mocked GPU training and serving; absent initial archive reported, restored dates files preserved",
     "intermediate_data_preparation": "missing files prepared and pinned checksum/count verified before GPU model loading; an empty failed output is preserved for retry, nonempty output and recovery directories protected",
     "completed_skills_startup": "passed on CPU: actual startup cell with Skills-only fixture and actual learner native archive; no earlier stage variables, backup/export calls or recovery imports required; ownership and missing archives recorded; incomplete or wrong-stage checkpoint rejected; inference server mocked, no GPU load claimed",
-    "classic_pacman": "Pinned original engine/assets in verified archive; new arcade data/checkpoint names, 4096-token state budget, CP0 identity callback and active-adapter before/after provenance"
+    "classic_pacman": "Pinned native assets/mechanics; ghost modes and simulation seconds displayed; Skills CP0 and separate planner-v1 CP3/CP4 with adapter identity verification",
+    "pacman_planning": {
+      "counts": {
+        "train": 4096,
+        "development": 256,
+        "evaluation": 256
+      },
+      "replay_records": 2000,
+      "expected_optimizer_steps": 762,
+      "epochs": 1,
+      "lr": 2e-05,
+      "batch": 4,
+      "accum": 2,
+      "row_budget": 0,
+      "cpu_recipe_checks": "passed",
+      "bootstrap_extraction": "passed; all three declared files checked against manifest; cached refresh preserves checkpoints and reviewed labels",
+      "native_replay_checks": 40,
+      "identically_recomputed_teacher_plans": 12,
+      "actual_evaluation_path_with_ground_truth_transport_fixture": {
+        "n": 256,
+        "accuracy": 1.0,
+        "caught_next_turn": 1,
+        "engine_revision": "7407174c1d6a38be8cd230577489e39e0873145b",
+        "tie_aware_teacher_accuracy": 1.0,
+        "lower_search_survival_choices": 0,
+        "mean_same_survival_search_regret": 0.0
+      },
+      "gpu_task_stage": "not_run",
+      "actual_cp3_cell": "passed with actual command/evidence path and mocked GPU subprocess: fresh full recipe/count checks, completed output reused without launching another training run"
+    }
   },
   "slides": {
     "count": 23,
-    "visual_qa": "All 23 native PDF renders inspected after Kev-4B curriculum update; zero output issues; readback matches content; native geometry preserved",
-    "note": "Slides and PDF/PPTX reflect the five-stage general curriculum; latest classic-game CP0\u2013CP5 instructions are in the notebook/README."
+    "visual_qa": "All 23 current native PDF renders inspected; zero output issues; text/notes readback verified and native slide/element IDs, sizes and transforms preserved",
+    "note": "Native game, ghost personalities/release and the larger planning dataset/full task recipe reflected in notebook, README, native Slides and PDF/PPTX exports.",
+    "revision_id": "8zPKQZG1UuIOFA",
+    "edited_slides": 11,
+    "export_method": "Authenticated Chrome native export; connector export download URI unavailable locally and unauthenticated export requires permission; sharing unchanged"
   },
   "gpu_training": "full_optimized_kev_4b_curriculum_not_run_by_course_author",
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "9ee8d94d51816629fb9858658d7de29ee95b618a9ed408d08053c38fcf136849",
-    "games/pacman.html": "2c3e8417de1bc2f101a8535627ba4bebfbf811faef38a6cae092e25ae34dd598",
-    "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
-    "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
+    "notebooks/pacman_kev_lab.ipynb": "b2127ac33aac343c14a749128cc62bf3165e28d4157dedd5a1bf5f5ced20c391",
+    "games/pacman.html": "041ac2da9fc402e55e347c5e2bc572a501dfac52ddc827aecdfcac096b777c07",
+    "slides/pacman-lab.pdf": "247ab2486d791f566ec80367ec86d95a34a28ab85b9f8cd7dc3757ae37c4462a",
+    "slides/pacman-lab.pptx": "dace41d2e807fc7b8844b68fe9d307e13e811b60b1dacfb396fbcf4c3b1c5301",
+    "data/pacman-planner-v1.zip": "a6f7e5282e888ede6a24f28cc7dffdb7d3cf51776ec5c9d6adefcf6e15e9e6a1",
+    "data/pacman-planner-v1-manifest.json": "3c22ede98985264b46410dc14026eaa22301b79a3f9061cf5063c739fc39b6e2",
+    "data/pacman-planner-v1-quality.json": "db6ae0d8b730c7582f3f76e0c0177061d5449cfd55bc87ae3dd4c66277d54fc0"
   },
   "training_data": {
     "dates": {
@@ -128,6 +163,34 @@
     "human_simulation_hz": 60,
     "kev_clock": "simulation paused while inference is pending",
     "visual_qa": "Chrome native maze/renderer/font/audio inspected; Skills-to-Pac-Man badge update and player decisions verified with explicitly labelled mock transport fixture; no live model inference claimed",
-    "live_colab_callback": "not_run_by_course_author"
+    "live_colab_callback": "not_run_by_course_author",
+    "ghost_release": "Native personal pellet counters and timeouts unchanged; CPU reversal fixture eventually releases all four.",
+    "ghost_status_ui": "Native Chrome ready/human-mode inspection passed; mode labels and simulated seconds visible. No live model transport exercised in this revision."
+  },
+  "planning_teacher": {
+    "algorithm": "20-move native-engine beam search, width 8 per first action, two independent future RNG scenarios",
+    "normal_ghost_prediction": "Native deterministic targeting/personality rules, phase/speed/release logic",
+    "optimality": "Approximate; finite horizon and pruning; teacher uses privileged current native timers/pixel state. Future episode RNG is not inspected.",
+    "quality_report": {
+      "previous_heuristic": {
+        "episodes": 5,
+        "mean_score": 2594,
+        "mean_pellets": 199.4,
+        "mean_decisions": 338,
+        "first_life_losses": 4,
+        "level_clears": 1,
+        "turn_limits": 0
+      },
+      "planner": {
+        "episodes": 5,
+        "mean_score": 3590,
+        "mean_pellets": 225,
+        "mean_decisions": 453.2,
+        "first_life_losses": 1,
+        "level_clears": 0,
+        "turn_limits": 4
+      }
+    },
+    "scope": "CPU native-controller comparison, five fixed seeds at level 1, first life or 512-decision cap. No model inference/training. Small sample; not a win-rate estimate. Planner gets higher mean score/pellets here but clears zero levels versus one for the previous heuristic."
   }
 }

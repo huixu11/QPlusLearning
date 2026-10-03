@@ -5,13 +5,21 @@
   "theme": "Kev-4B published LoRA + pointer-head curriculum, then Pac-Man adaptation",
   "duration_minutes": 90,
   "finetuning_minutes": 30,
-  "state": "Kev base-training and Pac-Man adaptation notebook prepared; GPU preflight pending",
-  "title": "Decision models for Pac-Man \u2014 Kev, CLM and the lab",
-  "revision_id": "mMqGSDbze2EP3g",
+  "state": "Native classic game and planning dataset prepared; GPU task training pending",
+  "title": "Decision models for Pac-Man — Kev, CLM and the lab",
+  "revision_id": "8zPKQZG1UuIOFA",
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
-  "synced_at": "2026-10-02",
-  "visual_qa": "All 23 native PDF page renders inspected after the Kev-4B and five-stage update; zero native output issues.",
+  "synced_at": "2026-10-03",
+  "visual_qa": "All 23 current native PDF renders inspected; zero output issues; IDs/geometry preserved; 11 lab slides and notes revised.",
   "initial_training_prework": true,
-  "lab_route": "Initial \u2192 dates/evidence \u2192 documents \u2192 skills/devtools \u2192 Pac-Man",
-  "general_stages_prework": true
+  "lab_route": "Initial → dates/evidence → documents → skills/devtools → Pac-Man",
+  "general_stages_prework": true,
+  "pacman_dataset": {
+    "train": 4096,
+    "development": 256,
+    "evaluation": 256,
+    "replay": 2000,
+    "optimizer_steps": 762,
+    "teacher": "20-move native-engine beam search"
+  }
 }
