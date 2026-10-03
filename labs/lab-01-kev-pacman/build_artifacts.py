@@ -349,8 +349,29 @@ except ImportError:
     print('Save skills checkpoint:', SKILLS_ARCHIVE)
 else:
     files.download(str(SKILLS_ARCHIVE))
-GENERAL = SKILLS
+""")
+    md("""## Load completed Skills checkpoint — start the lab here
+
+On a new runtime, run bootstrap, `runtime.setup()`, optimized preparation and the storage cell first. If using the automatic Drive backup, keep the complete `kev-4b-skills` backup folder (including `latest.json`, ZIPs and their `.zip.json` receipts) at `MyDrive/QPlusLearning/lab-01-kev-pacman/backups/kev-4b-skills`. With `SAVE_TO_DRIVE=True`, storage restores the completed native checkpoint to `/content/pacman-kev-lab/checkpoints/kev-4b-skills`.
+
+**When Skills is already complete, skip the Stage 1–4 training and backup/export cells. Run the cell below, then CP0–CP5.** It loads the completed Skills model, reads available saved stage metrics and starts inference. It does not resume Skills training or require the Documents checkpoint. Earlier stage weights and training curves are available only if you also restored them; their absent archives are reported in the submission.
+
+Set Skills ownership to `instructor` below if the instructor supplied this checkpoint. CP0 plays with this general model; CP3 fine-tunes it on your reviewed Pac-Man labels.""")
+    code("""# Load completed Skills checkpoint and start CP0
+from pathlib import Path
+import json
+CHECKPOINT_ROOT = LAB_DIR / 'checkpoints'
 INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
+DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
+DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
+SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
+GENERAL = SKILLS
+required = ['head.pt', 'adapter_config.json', 'training_config.json', 'training_metrics.json', 'run-evidence.json']
+missing = [name for name in required if not (GENERAL / name).is_file()]
+if missing or not any(file.is_file() for file in GENERAL.glob('adapter_model.*')):
+    raise RuntimeError(f'Restore the completed Skills checkpoint to {GENERAL}; missing files: {missing}, or adapter weights.')
+STAGE_OWNERS = globals().get('STAGE_OWNERS', {})
+STAGE_OWNERS.setdefault('skills', 'learner')  # 'instructor' for a supplied checkpoint
 stage_checkpoints = {'initial': INITIAL, 'dates': DATES, 'documents': DOCUMENTS, 'skills': SKILLS}
 stage_metrics, stage_configs = {}, {}
 for stage, folder in stage_checkpoints.items():
@@ -359,6 +380,11 @@ for stage, folder in stage_checkpoints.items():
     stage_metrics[stage] = json.loads(metrics_path.read_text()) if metrics_path.is_file() else None
 initial_config, dates_config, documents_config, skills_config = [stage_configs[name] for name in stage_checkpoints]
 initial_metrics, dates_metrics, documents_metrics, skills_metrics = [stage_metrics[name] for name in stage_checkpoints]
+skills_evidence = json.loads((GENERAL / 'run-evidence.json').read_text())
+if (skills_evidence['stage'] != 'skills' or skills_metrics['optimizer_steps'] != 1915
+        or skills_metrics['requested_records'] != 15320 or skills_config['args'].get('max_steps', 0)
+        or skills_metrics.get('truncated_records', 0) or skills_metrics.get('rejected_records', 0)):
+    raise ValueError('Complete the full Skills stage before starting the lab.')
 missing_stage_archives = [stage for stage, folder in stage_checkpoints.items()
                          if not (folder / 'head.pt').is_file() or not list(folder.glob('adapter_model.*'))]
 print('Earlier stage archives unavailable:', missing_stage_archives)

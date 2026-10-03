@@ -98,7 +98,7 @@ class CloudRuntimeTests(unittest.TestCase):
         notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
         sources = [''.join(cell['source']) for cell in notebook['cells'] if cell['cell_type'] == 'code']
         selected = [next(source for source in sources if source.startswith(prefix)) for prefix in
-                    ('DOCUMENTS =', 'SKILLS =', 'SKILLS_ARCHIVE =')]
+                    ('DOCUMENTS =', 'SKILLS =', '# Load completed Skills checkpoint')]
         meta = {'base': BASE_MODEL, 'base_revision': BASE_REVISION, 'lora': 16,
                 'head_dim': 256, 'option_isolation': False, 'special_embeddings': False,
                 'weights_dtype': 'fp32', 'weights': 'lora'}
@@ -150,6 +150,44 @@ class CloudRuntimeTests(unittest.TestCase):
             serve.assert_called_once_with(root / 'kev-4b-skills')
             self.assertEqual(original_date_files, {file.name: file.read_bytes() for file in dates.iterdir()})
             self.assertFalse(Path(str(dates) + '-recovery').exists())
+
+    def test_notebook_starts_cps_from_skills_only_without_training_or_recovery_imports(self):
+        notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
+        source = next(''.join(cell['source']) for cell in notebook['cells'] if cell['cell_type'] == 'code'
+                      and ''.join(cell['source']).startswith('# Load completed Skills checkpoint'))
+        for mode in ('learner', 'instructor', 'partial', 'missing_weights', 'wrong_stage'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder)
+                skills = runtime.workspace / 'checkpoints/kev-4b-skills'
+                checkpoint_files(skills)
+                (skills / 'training_config.json').write_text(json.dumps({'args': {'max_steps': 0}}))
+                (skills / 'training_metrics.json').write_text(json.dumps({
+                    'optimizer_steps': 1000 if mode == 'partial' else 1915,
+                    'requested_records': 15320}))
+                (skills / 'run-evidence.json').write_text(json.dumps({'stage': 'dates' if mode == 'wrong_stage' else 'skills'}))
+                if mode == 'missing_weights':
+                    (skills / 'head.pt').unlink()
+                original = {file.name: file.read_bytes() for file in skills.iterdir()}
+                namespace = {'LAB_DIR': runtime.workspace, 'runtime': runtime, 'print': lambda *args, **kwargs: None}
+                if mode == 'instructor':
+                    namespace['STAGE_OWNERS'] = {'skills': 'instructor'}
+                with patch.object(runtime, 'start', return_value={'data': []}) as serve, \
+                        patch.object(runtime, 'intermediate') as train:
+                    if mode in ('partial', 'missing_weights', 'wrong_stage'):
+                        with self.assertRaises((ValueError, RuntimeError)):
+                            exec(compile(source, '<notebook skills-only startup>', 'exec'), namespace)
+                        serve.assert_not_called()
+                    else:
+                        exec(compile(source, '<notebook skills-only startup>', 'exec'), namespace)
+                        serve.assert_called_once_with(skills)
+                        self.assertEqual(namespace['STAGE_OWNERS']['skills'], mode)
+                        self.assertEqual(namespace['missing_stage_archives'], ['initial', 'dates', 'documents'])
+                        self.assertIsNone(namespace['initial_config'])
+                        self.assertIsNone(namespace['dates_metrics'])
+                        self.assertEqual(namespace['skills_metrics']['optimizer_steps'], 1915)
+                    train.assert_not_called()
+                self.assertEqual(original, {file.name: file.read_bytes() for file in skills.iterdir()})
+                self.assertNotIn('latest_snapshot', namespace)
 
     def test_missing_or_partial_parent_explains_stage_one_prerequisite(self):
         with tempfile.TemporaryDirectory() as folder:

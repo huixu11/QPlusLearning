@@ -2,11 +2,11 @@
   "checked_at": "2026-10-03",
   "cpu_tests": {
     "result": "passed",
-    "count": 52,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction; missing/cached/corrupt intermediate-data admission before training launch; failed-download rejection; preserved empty unstarted output retry; recovery-directory protection; actual notebook documents-to-skills continuation from completed dates without Stage 1/2 variables or recovery, using fixture data and a mocked GPU subprocess"
+    "count": 53,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction; missing/cached/corrupt intermediate-data admission before training launch; failed-download rejection; preserved empty unstarted output retry; recovery-directory protection; actual notebook documents-to-skills continuation from completed dates without Stage 1/2 variables or recovery, using fixture data and a mocked GPU subprocess; standalone Skills-only notebook startup with absent earlier variables, learner/instructor ownership, no training or recovery import, and partial/missing/wrong-stage rejection"
   },
   "notebook": {
-    "code_cells": 22,
+    "code_cells": 23,
     "pinned_helper_files": 13,
     "syntax": "passed",
     "source_consistency": "passed",
@@ -30,7 +30,8 @@
     "automatic_drive_storage": "passed with a mocked Colab Drive mount and real local filesystem archives; old workspace deleted and Stage 1 automatically resumed the restored snapshot",
     "checkpoint_handoff": "missing/partial starting checkpoint identifies the preceding stage and available recovery; native reader stderr is included on failure; Stage 1 still defaults to fresh without a local/restored snapshot",
     "completed_dates_continuation": "passed on CPU: actual Documents/Skills/export cells, actual CloudRuntime commands and checkpoint inspection, verified fixture data, mocked GPU training and serving; absent initial archive reported, restored dates files preserved",
-    "intermediate_data_preparation": "missing files prepared and pinned checksum/count verified before GPU model loading; an empty failed output is preserved for retry, nonempty output and recovery directories protected"
+    "intermediate_data_preparation": "missing files prepared and pinned checksum/count verified before GPU model loading; an empty failed output is preserved for retry, nonempty output and recovery directories protected",
+    "completed_skills_startup": "passed on CPU: actual startup cell with Skills-only fixture and actual learner native archive; no earlier stage variables, backup/export calls or recovery imports required; ownership and missing archives recorded; incomplete or wrong-stage checkpoint rejected; inference server mocked, no GPU load claimed"
   },
   "slides": {
     "count": 23,
@@ -41,7 +42,7 @@
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "5c3d3ffec816f8842b9914f043f2fbadf56687da4df710a14cafa0a5f59bb5fa",
+    "notebooks/pacman_kev_lab.ipynb": "2339e8dc0b0c1fc62b158e979841672a876337b4cb8118e1ac7e21acf53cfc11",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
     "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
