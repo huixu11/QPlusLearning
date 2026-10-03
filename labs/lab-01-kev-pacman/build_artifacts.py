@@ -256,7 +256,7 @@ print({name: {'new_records': stage['records'], 'replay_records': stage['replay']
 """)
     md("""## Stage 2 — Dates and missing evidence (prework)
 
-Warm-start from your **Stage 1** checkpoint. Use 1,425 generated records (900 date-policy cases, 255 missing-fact cases and 270 intact controls) plus 2,000 replayed `decision-v7` training records. Published settings: one epoch, learning rate 2e-5, batch 4, accumulation 2, gradient checkpointing, BF16, seed 1 and 25% none minimal pairs. This is a separate run and a separate checkpoint. Its 180-minute attempt cap is a scheduling limit pending GPU measurements.""")
+Warm-start from your **completed Stage 1** checkpoint. On a fresh runtime without a restored checkpoint, run Stage 1 to completion first; setup/model downloads do not create this trained checkpoint. Use 1,425 generated records (900 date-policy cases, 255 missing-fact cases and 270 intact controls) plus 2,000 replayed `decision-v7` training records. Published settings: one epoch, learning rate 2e-5, batch 4, accumulation 2, gradient checkpointing, BF16, seed 1 and 25% none minimal pairs. This is a separate run and a separate checkpoint. Its 180-minute attempt cap is a scheduling limit pending GPU measurements.""")
     code("""DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
 RESUME_DATES = latest_snapshot(Path(str(DATES) + '-recovery')) is not None
 print('Dates command:', runtime.intermediate_command('dates', DATES, INITIAL), flush=True)

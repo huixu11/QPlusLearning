@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from itertools import product
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,7 +14,55 @@ from training_stages import specifications
 ROOT = Path(__file__).resolve().parent
 
 
+def checkpoint_files(folder):
+    """Placeholder files for command tests that mock the native metadata reader."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ('head.pt', 'adapter_config.json', 'adapter_model.safetensors'):
+        (folder / name).write_bytes(b'fixture')
+
+
 class CloudRuntimeTests(unittest.TestCase):
+    def test_missing_or_partial_parent_explains_stage_one_prerequisite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            initial = Path(folder) / 'checkpoints/kev-4b-initial'
+            with patch('cloud_runtime.subprocess.check_output') as reader, patch('cloud_runtime.stream_training') as train:
+                with self.assertRaisesRegex(RuntimeError, 'Run Stage 1 .* to completion'):
+                    runtime.intermediate('dates', 'dates', initial)
+                initial.mkdir(parents=True)
+                recovery = Path(str(initial) + '-recovery')
+                snapshot = recovery / 'step-0000900-fixture'
+                snapshot.mkdir(parents=True)
+                (snapshot / 'complete.json').write_text(json.dumps({'step': 900}))
+                (recovery / 'latest.json').write_text(json.dumps({'directory': snapshot.name}))
+                with self.assertRaisesRegex(RuntimeError, 'Recovery is available at optimizer step 900'):
+                    runtime.intermediate('dates', 'dates', initial)
+                reader.assert_not_called()
+                train.assert_not_called()
+
+    def test_checkpoint_reader_failure_exposes_actual_subprocess_stderr(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            runtime.python = Path(sys.executable)
+            package = runtime.repo / 'kev'
+            package.mkdir(parents=True)
+            (package / '__init__.py').write_text('')
+            (package / 'checkpoint.py').write_text("class Checkpoint:\n    def __init__(self, path):\n        raise ValueError('checkpoint metadata unreadable')\n")
+            initial = Path(folder) / 'checkpoints/kev-4b-initial'
+            checkpoint_files(initial)
+            with self.assertRaisesRegex(RuntimeError, 'ValueError: checkpoint metadata unreadable') as raised:
+                runtime.intermediate_command('dates', 'dates', initial)
+            self.assertIn(str(initial), str(raised.exception))
+            self.assertIn('Traceback', str(raised.exception))
+
+    def test_explicit_resume_without_snapshot_gives_fresh_run_instruction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            with patch('cloud_runtime.stream_training') as train:
+                with self.assertRaisesRegex(RuntimeError, 'set RESUME_CHECKPOINT=None inside the Stage 1 cell'):
+                    runtime._train([], Path(folder) / 'initial', 180, 'initial', resume_from='latest')
+                train.assert_not_called()
+
     def test_notebook_initial_uses_4x2_for_fresh_resumed_or_completed_checkpoint(self):
         notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
         source = next(''.join(cell['source']) for cell in notebook['cells']
@@ -214,6 +263,7 @@ class CloudRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder)
             initial = Path(folder) / "initial"
+            checkpoint_files(initial)
             with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)) as read_meta:
                 command = runtime.training_command("reviewed.jsonl", "candidate", init_from=initial)
             self.assertEqual(read_meta.call_args.args[0][-1], str(initial))
@@ -235,6 +285,7 @@ class CloudRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder, training_profile="published_reference")
             for stage, parent in [("dates", "initial"), ("documents", "dates"), ("skills", "documents")]:
+                checkpoint_files(Path(folder) / parent)
                 with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
                     command = runtime.intermediate_command(stage, "new-checkpoint", Path(folder) / parent)
                 flags = dict(zip(command[3::2], command[4::2]))
@@ -259,6 +310,7 @@ class CloudRuntimeTests(unittest.TestCase):
             (runtime.repo / "experiments").mkdir(parents=True)
             shutil.copy2(recipe_file, runtime.repo / "experiments/q35-4b-s23.json")
             commands = [runtime.pretraining_command("initial")]
+            checkpoint_files(runtime.repo / 'parent')
             with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps(meta)):
                 commands += [runtime.intermediate_command(s, s, "parent") for s in specifications()]
                 commands += [runtime.training_command("reviewed.jsonl", "domain", "parent")]
@@ -277,6 +329,7 @@ class CloudRuntimeTests(unittest.TestCase):
     def test_domain_rejects_incompatible_backbone(self):
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder)
+            checkpoint_files(runtime.repo / 'old-parent')
             with patch("cloud_runtime.subprocess.check_output", return_value=json.dumps({
                     "base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "old"})):
                 with self.assertRaisesRegex(RuntimeError, "0.8B adapters are incompatible"):

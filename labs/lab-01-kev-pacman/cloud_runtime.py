@@ -320,8 +320,33 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
 
     def training_command(self, training_data, output, init_from, steps=0, max_state=2048):
         # Read architecture from the checkpoint rather than guessing compatible flags.
+        source = Path(init_from)
+        source = source if source.is_absolute() else self.repo / source
+        missing = [name for name in ('head.pt', 'adapter_config.json') if not (source / name).is_file()]
+        if not any(file.is_file() for file in source.glob('adapter_model.*')):
+            missing.append('adapter_model.*')
+        if missing:
+            stage = {'kev-4b-initial': 'Stage 1 (initial decision training)',
+                     'kev-4b-dates': 'Stage 2 (dates)',
+                     'kev-4b-documents': 'Stage 3 (documents)',
+                     'kev-4b-skills': 'Stage 4 (skills)'}.get(source.name, 'the preceding training stage')
+            message = (f'Starting checkpoint is missing or incomplete: {source}. Missing: {", ".join(missing)}. '
+                       f'Run {stage} to completion or restore its completed checkpoint before continuing. '
+                       'Setup and model downloads do not create a trained checkpoint.')
+            snapshot = latest_snapshot(Path(str(source) + '-recovery'))
+            if snapshot is not None:
+                receipt = json.loads((snapshot / 'complete.json').read_text())
+                message += (f' Recovery is available at optimizer step {receipt["step"]}: {snapshot}. '
+                            'Rerun that stage\'s training cell to resume it.')
+            raise RuntimeError(message)
         code = "import json,sys; from kev.checkpoint import Checkpoint; m=Checkpoint(sys.argv[1]).meta; print(json.dumps({k:getattr(m,k) for k in ['base','base_revision','lora','head_dim','option_isolation','special_embeddings','weights_dtype','weights']}))"
-        meta = json.loads(subprocess.check_output([str(self.python), "-c", code, str(init_from)], cwd=self.repo, env=self.environment(), text=True))
+        try:
+            result = subprocess.check_output([str(self.python), "-c", code, str(init_from)],
+                                             cwd=self.repo, env=self.environment(), text=True, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as error:
+            diagnostic = (error.stderr or error.output or 'No diagnostic output was returned.').strip()
+            raise RuntimeError(f'Could not read starting checkpoint {source} (exit {error.returncode}):\n{diagnostic}') from None
+        meta = json.loads(result)
         if meta["base"] != BASE_MODEL or meta["base_revision"] != BASE_REVISION:
             raise RuntimeError("This Kev-4B lab requires a checkpoint from its pinned 4B backbone. Start fresh; 0.8B adapters are incompatible.")
         if meta["weights"] != "lora":
@@ -352,7 +377,10 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
             if not snapshot.is_relative_to(recovery_root) or not (snapshot / "complete.json").is_file():
                 raise ValueError("Choose a complete recovery snapshot inside this output's recovery directory.")
         if resume and (snapshot is None or not output.is_dir()):
-            raise RuntimeError("No resumable LoRA snapshot for this output. Resume requested; training will not start fresh.")
+            instruction = ("For a fresh Stage 1 run, set RESUME_CHECKPOINT=None inside the Stage 1 cell and rerun it. "
+                           if stage == 'initial' else "Disable this stage's resume flag for a fresh output. ")
+            raise RuntimeError(f"No resumable LoRA snapshot for {output}. Resume requested; training will not start fresh. "
+                               + instruction + "If you intended recovery, restore the backup first.")
         if snapshot is not None and not (snapshot / "recovery.pt").is_file():
             raise ValueError("Selected recovery snapshot is missing recovery.pt; training will not start fresh.")
         if (output.exists() or recovery_root.exists()) and not resume:
