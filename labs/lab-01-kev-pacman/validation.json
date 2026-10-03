@@ -2,8 +2,8 @@
   "checked_at": "2026-10-03",
   "cpu_tests": {
     "result": "passed",
-    "count": 45,
-    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes"
+    "count": 48,
+    "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction"
   },
   "notebook": {
     "code_cells": 22,
@@ -27,7 +27,8 @@
       "checkpoint_selection_cpu_checks": "passed; chosen step 900 takes precedence over newer step 1000",
       "timing_trials": "removed from notebook and CloudRuntime"
     },
-    "automatic_drive_storage": "passed with a mocked Colab Drive mount and real local filesystem archives; old workspace deleted and Stage 1 automatically resumed the restored snapshot"
+    "automatic_drive_storage": "passed with a mocked Colab Drive mount and real local filesystem archives; old workspace deleted and Stage 1 automatically resumed the restored snapshot",
+    "checkpoint_handoff": "missing/partial starting checkpoint identifies the preceding stage and available recovery; native reader stderr is included on failure; Stage 1 still defaults to fresh without a local/restored snapshot"
   },
   "slides": {
     "count": 23,
@@ -38,7 +39,7 @@
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "2da1fe846640866de33d174f42fa6c2de5c099ec38e4aa6f232c879429d27d95",
+    "notebooks/pacman_kev_lab.ipynb": "4734e0f640f5b186afe3f7c03f08a2bfc8c007d8f1accacafe324b40ec3fd1d5",
     "games/pacman.html": "27b6e63c70076c21b46966d0cdb14ca2c52fa8e066bbe7cbede243574fc87726",
     "slides/pacman-lab.pdf": "0a825f2977a76aa8c3f8c24a0ba72b40ec3f93d390c2108f06674300b055c321",
     "slides/pacman-lab.pptx": "16b60bf007730ac96ab38b45b5f527f4e957c91dc0cdb7acafb22b02d8549f9e"
