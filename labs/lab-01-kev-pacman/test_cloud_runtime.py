@@ -1,6 +1,7 @@
 """Check hardware admission and the published-to-domain checkpoint transition."""
 import json
 from pathlib import Path
+from itertools import product
 import shutil
 import tempfile
 import unittest
@@ -13,32 +14,46 @@ ROOT = Path(__file__).resolve().parent
 
 
 class CloudRuntimeTests(unittest.TestCase):
-    def test_notebook_initial_resume_explicitly_uses_4x2_after_prior_selection(self):
+    def test_notebook_initial_uses_4x2_for_fresh_resumed_or_completed_checkpoint(self):
         notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
         source = next(''.join(cell['source']) for cell in notebook['cells']
                       if cell['cell_type'] == 'code' and ''.join(cell['source']).startswith('INITIAL ='))
         code = compile(source, '<notebook initial resume>', 'exec')
-        for previous in (None, {'batch': 1, 'accum': 8, 'row_budget': 2048},
-                         {'batch': 2, 'accum': 4, 'row_budget': 4096}):
-            with self.subTest(previous=previous), tempfile.TemporaryDirectory() as folder:
+        previous_choices = (None, {'batch': 1, 'accum': 8, 'row_budget': 2048},
+                            {'batch': 2, 'accum': 4, 'row_budget': 4096})
+        for previous, mode in product(previous_choices, ('fresh', 'resume', 'complete')):
+            with self.subTest(previous=previous, mode=mode), tempfile.TemporaryDirectory() as folder:
                 runtime = CloudRuntime(folder, initial_execution=previous)
                 (runtime.repo / 'experiments').mkdir(parents=True)
                 shutil.copy2(ROOT / 'vendor/kev/experiments/q35-4b-s23.json',
                              runtime.repo / 'experiments/q35-4b-s23.json')
                 output = Path(folder) / 'checkpoints/kev-4b-initial'
+                if mode != 'fresh':
+                    output.mkdir(parents=True)
+                    snapshot = Path(str(output) + '-recovery') / 'step-0000900-fixture'
+                    snapshot.mkdir(parents=True)
+                    (snapshot / 'complete.json').write_text(json.dumps({'step': 900}))
+                    (snapshot.parent / 'latest.json').write_text(json.dumps({'directory': snapshot.name}))
+                    if mode == 'complete':
+                        (output / 'run-evidence.json').write_text('{}')
                 namespace = {'runtime': runtime, 'CHECKPOINT_ROOT': output.parent, 'STAGE_OWNERS': {},
-                             'json': json, 'print': lambda *args, **kwargs: None,
+                             'json': json, 'Path': Path, 'print': lambda *args, **kwargs: None,
                              'inspect_checkpoint': lambda *args, **kwargs: ({}, {})}
                 with patch.object(runtime, '_train', return_value=output) as train:
                     exec(code, namespace)
-                command = train.call_args.args[0]
+                if mode == 'complete':
+                    train.assert_not_called()
+                    command = runtime.pretraining_command(output)
+                else:
+                    train.assert_called_once()
+                    command = train.call_args.args[0]
+                    self.assertEqual(train.call_args.kwargs['resume_from'], 'latest' if mode == 'resume' else None)
+                    self.assertEqual(train.call_args.kwargs['allow_execution_change'], mode == 'resume')
                 flags = dict(zip(command[3::2], command[4::2]))
                 self.assertEqual([flags['--' + key] for key in ('batch', 'accum', 'row_budget')], ['4', '2', '0'])
                 self.assertEqual(flags['--out'], str(output.resolve()))
                 self.assertEqual(flags['--checkpointing'], '1')
                 self.assertEqual(flags['--lr'], '5e-05')
-                self.assertEqual(train.call_args.kwargs['resume_from'], 'latest')
-                self.assertTrue(train.call_args.kwargs['allow_execution_change'])
                 self.assertEqual(runtime.selected_initial_recipe({})['batch'], 4)
                 self.assertEqual(runtime.selected_recipe({})['batch'], 1)
 

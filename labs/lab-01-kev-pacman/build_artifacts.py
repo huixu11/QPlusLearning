@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "vendor/jev-pacman"
 HELPERS = ["api_client.py", "pacman_lab.py", "cloud_runtime.py", "training_monitor.py",
-           "lora_recovery.py", "optimized_training.py", "training-kernels.json", "training_stages.py", "training-stages.json", "games/player-controller.js",
+           "lora_recovery.py", "checkpoint_backup.py", "optimized_training.py", "training-kernels.json", "training_stages.py", "training-stages.json", "games/player-controller.js",
            "vendor/jev-pacman/index.html", "vendor/jev-pacman/LICENSE"]
 
 
@@ -87,7 +87,7 @@ if 'runtime' in globals():
     runtime.stop()
 import importlib
 importlib.invalidate_caches()
-for name in ['cloud_runtime', 'training_monitor', 'lora_recovery', 'optimized_training', 'training_stages', 'pacman_lab', 'api_client']:
+for name in ['cloud_runtime', 'training_monitor', 'lora_recovery', 'checkpoint_backup', 'optimized_training', 'training_stages', 'pacman_lab', 'api_client']:
     sys.modules.pop(name, None)
 from cloud_runtime import CloudRuntime
 from training_stages import specifications, inspect_checkpoint, restore_checkpoint, backup_checkpoint
@@ -101,7 +101,7 @@ GAME = notebook_game(SOURCE_HTML, (LAB_DIR / 'games/player-controller.js').read_
 STAGE_OWNERS = {}
 print('Prepared player controller and disjoint synthetic snapshots.')
 """)
-    md("""Setup fetches twelve small files from a specific course commit and verifies every SHA-256. Their readable source is in GitHub. The previous embedded source dictionary was a portability mechanism; it is not model input or training data. This notebook now needs network access to fetch helpers on first use.
+    md("""Setup fetches thirteen small files from a specific course commit and verifies every SHA-256. Their readable source is in GitHub. The previous embedded source dictionary was a portability mechanism; it is not model input or training data. This notebook now needs network access to fetch helpers on first use.
 
 ## Training monitor: open TensorBoard before running any stage
 
@@ -148,18 +148,24 @@ The **Stage 1 cell explicitly selects batch 4 × accumulation 2 and `row_budget=
 
 Save at optimizer step 1, every 100 steps or five minutes (checked at optimizer boundaries), and the final step. Keep the latest two complete snapshots. Each contains the LoRA adapter/head, optimizer, scheduler, RNG and progress counters. Kev's native `--resume` supports full-weight runs only; the lab adds a separate LoRA recovery implementation. After a failure, Stage 1 uses its `RESUME_CHECKPOINT` selector; later stages use their `RESUME_*` flags. Keep the same inputs and output path, and rerun only the affected stage. Stage 1 permits its explicit batching change; other training arguments must match. Do not rerun completed earlier stages. A snapshot can resume training or supply an intermediate model; it is not a completed curriculum stage.
 
-**The older notebook saved LoRA weights only at the end. Its failed step-2,073 run has logs/configuration but no automatic learned checkpoint.** New output names below preserve that failed directory. Optional Drive storage keeps new checkpoints and recovery snapshots across runtime loss. Local `/content` files are temporary; export before disconnecting. Resume needs the original absolute paths. Restore a recovery ZIP into a new checkpoint root at that same path.""")
-    code("""SAVE_TO_DRIVE = False  # Set True before training to persist checkpoints and recovery
+**The older notebook saved LoRA weights only at the end. Its failed step-2,073 run has logs/configuration but no automatic learned checkpoint.** New output names below preserve that failed directory. Local `/content` files disappear when the runtime is replaced.
+
+Set **`SAVE_TO_DRIVE=True`** below before training. Colab mounts Drive once. Training and recovery saves stay on the local disk; after each complete recovery save, the notebook copies a verified archive to `MyDrive/QPlusLearning/lab-01-kev-pacman/backups`. It keeps the latest two backups per stage and also archives the completed final checkpoint. Adapter/head weights, optimizer, scheduler, RNG, progress and any custom training JSONL are included; foundation weights and packages are downloaded again by setup. Wait for **`Drive backup complete at optimizer step …`** before deleting a runtime. If backup fails, the local snapshot remains and training stops with the error.
+
+On a new runtime, enable the same flag and run this storage cell. Available Drive backups automatically restore to their original local paths without overwriting existing local checkpoints or changed labels. Stage 1 then detects the restored snapshot and resumes by default. With no checkpoint it starts fresh. You can still select `latest` or a specific snapshot explicitly. Logs and TensorBoard events have their separate export control below.""")
+    code("""SAVE_TO_DRIVE = False  # True enables automatic backup and restore; no manual file copying
 RESTORE_RECOVERY_ARCHIVE = None  # ZIP from the inspection/export cell; restore into an absent root
 CHECKPOINT_ROOT = LAB_DIR / 'checkpoints'
+DRIVE_BACKUP_ROOT = None
 if SAVE_TO_DRIVE:
     from google.colab import drive
     drive.mount('/content/drive')
-    CHECKPOINT_ROOT = Path('/content/drive/MyDrive/QPlusLearning/lab-01-kev-pacman/checkpoints')
+    DRIVE_BACKUP_ROOT = Path('/content/drive/MyDrive/QPlusLearning/lab-01-kev-pacman/backups')
 if RESTORE_RECOVERY_ARCHIVE is not None:
     restore_checkpoint(RESTORE_RECOVERY_ARCHIVE, CHECKPOINT_ROOT)
 else:
     CHECKPOINT_ROOT.mkdir(parents=True, exist_ok=True)
+print('Automatic Drive backup:', json.dumps(runtime.configure_backup(DRIVE_BACKUP_ROOT, CHECKPOINT_ROOT), indent=2))
 print('Later-stage training profile:', runtime.training_profile, 'overrides:', runtime.selected_recipe({}))
 print('Stage 1 selects batch 4 x accumulation 2 / row_budget 0 in its own training cell.')
 print('Checkpoints and recovery:', CHECKPOINT_ROOT)
@@ -204,10 +210,10 @@ for archive in archives:
 
 Only this stage starts fresh LoRA adapters and a pointer head over the pretrained Qwen base. It uses the selected published `experiments/q35-4b-s23.json` seed-2 recipe: all 12,576 `decision-v7` training records, two epochs, batch 4, accumulation 2, gradient checkpointing, learning rate 5e-5, rank 16 / alpha 32, a 256-dimensional head and BF16 autocast over FP32 weights. Option shuffling, none/distractor insertion and 25% none minimal pairs remain active. There is no `--init_from`.
 
-The initial cell performs this stage only. It explicitly sets `INITIAL_EXECUTION={'batch': 4, 'accum': 2, 'row_budget': 0}` before constructing the command; gradient checkpointing remains enabled. The generic memory profile applies to later stages. **The cell defaults to resuming the latest complete recovery snapshot for the same `INITIAL` path**, including an earlier 1×8 run. You can select a specific saved snapshot with `RESUME_CHECKPOINT`. It prints the snapshot path and saved step before launching training and stops if the requested checkpoint is missing. For a first run, explicitly set `RESUME_CHECKPOINT=None`. It streams progress, saves recovery snapshots and writes TensorBoard curves. The full run is prework with a configurable 180-minute attempt cap, not a promised duration. To restore a completed initial checkpoint, upload its ZIP, set `RESTORE_ARCHIVE` and declare learner/instructor ownership.""")
+The initial cell performs this stage only. It explicitly sets `INITIAL_EXECUTION={'batch': 4, 'accum': 2, 'row_budget': 0}` before constructing the command; gradient checkpointing remains enabled. The generic memory profile applies to later stages. **By default it resumes a complete recovery snapshot when one exists locally or was restored from Drive; with no checkpoint it starts fresh.** You can select `latest` or a specific saved snapshot with `RESUME_CHECKPOINT`; an explicitly requested missing checkpoint stops the run. A completed initial checkpoint is reused. It streams progress, saves recovery snapshots and writes TensorBoard curves. The full run is prework with a configurable 180-minute attempt cap, not a promised duration. To restore a completed initial checkpoint manually, upload its ZIP, set `RESTORE_ARCHIVE` and declare learner/instructor ownership.""")
     md("""### Resume initial training
 
-Keep the same `INITIAL` output. The cell below uses one setting: **`RESUME_CHECKPOINT='latest'`** resumes the latest complete snapshot from that output's recovery directory. To choose a specific saved snapshot, set `RESUME_CHECKPOINT` to its full directory path. The launcher prints the saved optimizer step and selected path before restoring weights, optimizer, scheduler, RNG and progress. A missing or incomplete requested checkpoint stops the run; it does not start fresh.
+Keep the same `INITIAL` output. The cell below uses one setting: **`RESUME_CHECKPOINT`**. Its default detects whether a recovery snapshot exists. Set it to **`'latest'`** to require the latest checkpoint, or to a full snapshot directory path to choose a specific save. Set it to `None` for a fresh run in a new output. The launcher prints the saved optimizer step and selected path before restoring weights, optimizer, scheduler, RNG and progress. A missing or incomplete explicitly requested checkpoint stops the run; it does not start fresh.
 
 The cell explicitly selects **batch 4 × accumulation 2 and row budget 0**, permitting only the batching changes needed to continue an earlier 1×8 run. Base, data, epochs, learning rates, precision, effective batch and total optimizer steps must match. Grouping and dropout draws can change, and the execution change is recorded in recovery receipts. Work after the chosen snapshot is repeated. For a student's first run with no checkpoint, explicitly set `RESUME_CHECKPOINT=None` to initialize a new output. Existing outputs are protected from accidental replacement.""")
     code("""INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
@@ -215,12 +221,17 @@ INITIAL_EXECUTION = {'batch': 4, 'accum': 2, 'row_budget': 0}  # Explicit publis
 runtime.initial_execution = dict(INITIAL_EXECUTION)
 print('Selected initial execution:', runtime.initial_execution, flush=True)
 print('Selected command:', runtime.pretraining_command(INITIAL), flush=True)
-RESUME_CHECKPOINT = 'latest'  # Or a specific snapshot directory; None only for a new run
+from lora_recovery import latest_snapshot
+RESUME_CHECKPOINT = 'latest' if latest_snapshot(Path(str(INITIAL) + '-recovery')) else None
+# To choose a saved step, replace the line above with its full snapshot directory path.
 RESTORE_ARCHIVE = None  # Example: '/content/pacman-initial-checkpoint.zip'
 RESTORED_CHECKPOINT_OWNER = 'learner'  # 'instructor' for a supplied fallback
 if RESTORE_ARCHIVE is None:
-    runtime.pretrain(INITIAL, steps=0, resume_from=RESUME_CHECKPOINT,
-                     allow_execution_change=RESUME_CHECKPOINT is not None)
+    if (INITIAL / 'run-evidence.json').is_file():
+        print('Using completed initial checkpoint:', INITIAL)
+    else:
+        runtime.pretrain(INITIAL, steps=0, resume_from=RESUME_CHECKPOINT,
+                         allow_execution_change=RESUME_CHECKPOINT is not None)
     STAGE_OWNERS['initial'] = 'learner'
 else:
     restore_checkpoint(RESTORE_ARCHIVE, INITIAL)
@@ -247,12 +258,15 @@ print({name: {'new_records': stage['records'], 'replay_records': stage['replay']
 
 Warm-start from your **Stage 1** checkpoint. Use 1,425 generated records (900 date-policy cases, 255 missing-fact cases and 270 intact controls) plus 2,000 replayed `decision-v7` training records. Published settings: one epoch, learning rate 2e-5, batch 4, accumulation 2, gradient checkpointing, BF16, seed 1 and 25% none minimal pairs. This is a separate run and a separate checkpoint. Its 180-minute attempt cap is a scheduling limit pending GPU measurements.""")
     code("""DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
-RESUME_DATES = False
+RESUME_DATES = latest_snapshot(Path(str(DATES) + '-recovery')) is not None
 print('Dates command:', runtime.intermediate_command('dates', DATES, INITIAL), flush=True)
 RESTORE_DATES_ARCHIVE = None
 RESTORED_DATES_OWNER = 'learner'
 if RESTORE_DATES_ARCHIVE is None:
-    runtime.intermediate('dates', DATES, init_from=INITIAL, resume=RESUME_DATES)
+    if (DATES / 'run-evidence.json').is_file():
+        print('Using completed dates checkpoint:', DATES)
+    else:
+        runtime.intermediate('dates', DATES, init_from=INITIAL, resume=RESUME_DATES)
     STAGE_OWNERS['dates'] = 'learner'
 else:
     restore_checkpoint(RESTORE_DATES_ARCHIVE, DATES)
@@ -269,12 +283,15 @@ else:
 """)
     md('## Stage 3 — Documents (prework)\n\nWarm-start from **Stage 2**. Use 5,219 consumer-finance complaint records plus 2,000 replayed decision-v7 training records. Published settings: one epoch, learning rate 2e-5, batch 2 × accumulation 4, BF16, FP32 stored weights, state budget 7,552, gradient checkpointing, seed 2 and 25% none minimal pairs. Expect 903 optimizer steps. The memory profile uses batch 1 × accumulation 8 with bounded row passes. Save this checkpoint before continuing; documents and skills are separate in Kev-4B.')
     code("""DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
-RESUME_DOCUMENTS = False
+RESUME_DOCUMENTS = latest_snapshot(Path(str(DOCUMENTS) + '-recovery')) is not None
 print('Documents command:', runtime.intermediate_command('documents', DOCUMENTS, DATES), flush=True)
 RESTORE_DOCUMENTS_ARCHIVE = None
 RESTORED_DOCUMENTS_OWNER = 'learner'
 if RESTORE_DOCUMENTS_ARCHIVE is None:
-    runtime.intermediate('documents', DOCUMENTS, init_from=DATES, resume=RESUME_DOCUMENTS)
+    if (DOCUMENTS / 'run-evidence.json').is_file():
+        print('Using completed documents checkpoint:', DOCUMENTS)
+    else:
+        runtime.intermediate('documents', DOCUMENTS, init_from=DATES, resume=RESUME_DOCUMENTS)
     STAGE_OWNERS['documents'] = 'learner'
 else:
     restore_checkpoint(RESTORE_DOCUMENTS_ARCHIVE, DOCUMENTS)
@@ -295,12 +312,15 @@ Warm-start from **Stage 3 documents**. Use 6,000 generated skill records plus 5,
 
 A 4B model still uses hybrid DeltaNet/full attention and needs optimized kernels. Start fresh from the pinned 4B base; 0.8B adapters cannot initialize this curriculum. Published H100/H200 timings do not predict this GPU's duration.""")
     code("""SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
-RESUME_SKILLS = False
+RESUME_SKILLS = latest_snapshot(Path(str(SKILLS) + '-recovery')) is not None
 print('Skills and developer tools command:', runtime.intermediate_command('skills', SKILLS, DOCUMENTS), flush=True)
 RESTORE_SKILLS_ARCHIVE = None
 RESTORED_SKILLS_OWNER = 'learner'
 if RESTORE_SKILLS_ARCHIVE is None:
-    runtime.intermediate('skills', SKILLS, init_from=DOCUMENTS, resume=RESUME_SKILLS)
+    if (SKILLS / 'run-evidence.json').is_file():
+        print('Using completed skills checkpoint:', SKILLS)
+    else:
+        runtime.intermediate('skills', SKILLS, init_from=DOCUMENTS, resume=RESUME_SKILLS)
     STAGE_OWNERS['skills'] = 'learner'
 else:
     restore_checkpoint(RESTORE_SKILLS_ARCHIVE, SKILLS)
@@ -355,7 +375,10 @@ print(json.dumps(response['answers'], indent=2), '\\nHTTP ms:', round(elapsed))
 Starter data has **64 training, 16 development, 16 evaluation** snapshots. Labels come from a stated heuristic: avoid immediate capture, approach a dot by maze distance, prefer distance from ghosts, then use a fixed tie order. These are synthetic labels, not recorded human expertise.
 
 Inspect three training boards and enter your own legal move labels in `EDITS` before checking the teacher. Keep all edits in the training partition. Fix the training file and one candidate before opening evaluation data. Positions are disjoint across splits, but every split uses the same maze.""")
-    code("""training = [json.loads(line) for line in (LAB_DIR / 'data/pacman-train.jsonl').read_text().splitlines()]
+    code("""training_file = LAB_DIR / 'data/pacman-train-reviewed.jsonl'
+label_source = training_file if training_file.is_file() else LAB_DIR / 'data/pacman-train.jsonl'
+training = [json.loads(line) for line in label_source.read_text().splitlines()]
+print('Training labels:', label_source)
 for row in training[:3]:
     print(row['_meta']['id'], json.dumps(row['state'], indent=2))
     print('Legal:', list(row['questions']['move']['criteria']))
@@ -367,8 +390,8 @@ for row in training:
         assert label in row['questions']['move']['criteria'], 'Choose a legal move'
         row['questions']['move'].update(label=label, src='learner_annotation')
         row['_meta']['label_source'] = 'learner annotation'
-training_file = LAB_DIR / 'data/pacman-train-reviewed.jsonl'
-training_file.write_text(''.join(json.dumps(row) + '\\n' for row in training))
+if EDITS or not training_file.is_file():
+    training_file.write_text(''.join(json.dumps(row) + '\\n' for row in training))
 print('Teacher labels for inspected boards:', [(r['_meta']['id'], r['questions']['move']['label']) for r in training[:3]])
 print('Split sizes:', manifest['counts'])
 before_dev = evaluate(LAB_DIR / 'data/pacman-development.jsonl')
@@ -383,8 +406,14 @@ Warm-start from **your Stage 4 skills/devtools checkpoint**, using Kev's documen
 The helper reads architecture from the checkpoint and stops inference to free GPU memory. Use a new checkpoint directory. A timed GPU preflight is still required; successful execution or improved play has not been established by this draft.""")
     code("""print(json.dumps(training[0], indent=2))
 CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman'
-RESUME_PACMAN = False
-checkpoint = runtime.finetune(training_file, CHECKPOINT, init_from=GENERAL, steps=0, resume=RESUME_PACMAN)
+RESUME_PACMAN = latest_snapshot(Path(str(CHECKPOINT) + '-recovery')) is not None
+if (CHECKPOINT / 'run-evidence.json').is_file():
+    evidence = json.loads((CHECKPOINT / 'run-evidence.json').read_text())
+    assert evidence['training_data_sha256'] == hashlib.sha256(training_file.read_bytes()).hexdigest(), 'Saved checkpoint used different labels; select a new checkpoint output to retrain.'
+    checkpoint = CHECKPOINT
+    print('Using completed Pac-Man checkpoint:', checkpoint)
+else:
+    checkpoint = runtime.finetune(training_file, CHECKPOINT, init_from=GENERAL, steps=0, resume=RESUME_PACMAN)
 metrics = json.loads((checkpoint / 'training_metrics.json').read_text())
 print(metrics)
 assert metrics['optimizer_steps'] > 0, 'Training must update the model'
