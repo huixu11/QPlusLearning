@@ -100,7 +100,7 @@ Collection uses 70% planning, 20% the old heuristic and 10% random legal actions
 
 Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing each move. The display shows simulation seconds and every ghost's mode. Ghosts leave home gradually: Blinky starts outside; Pinky leaves first; Inky and Clyde use pellet counters or a no-pellet timeout (about four simulation seconds at level 1). Repeated reversals can advance very few frames per decision, making release appear slow in wall-clock time. The browser retains three lives and level progression. Truncation or dropped records fail the training audit. Versioned `pacman-planner-v1-*` files and `kev-4b-pacman-planner-v1` preserve previous heuristic experiments. Reuse your completed Skills checkpoint and rerun CP2/CP3; general stages need no retraining.
 
-**Refresh an existing runtime:** copy and run the new bootstrap cell, run **Load completed Skills checkpoint — start the lab here**, then the new CP0 browser cell. Bootstrap stops the old server and refreshes verified helpers/assets/data while preserving checkpoints/logs. General stages do not need retraining. Use the new CP1–CP5 cells thereafter.
+**Refresh an existing runtime:** copy and run the new bootstrap cell, then rerun `runtime.setup()`, optimized preparation with `RUN_TRAINING_PREFLIGHT=False`, and the storage cell with `SAVE_TO_DRIVE=True` if using Drive. Bootstrap creates a new runtime helper, so these cells restore its hardware, training and backup settings while reusing cached files. Run **Load completed Skills checkpoint — start the lab here**, then the new CP0–CP5 cells. Checkpoints/logs remain in place; general stages do not need retraining.
 
 ## Validation and provenance
 

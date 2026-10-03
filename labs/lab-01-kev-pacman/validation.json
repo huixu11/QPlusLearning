@@ -75,7 +75,7 @@
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "b2127ac33aac343c14a749128cc62bf3165e28d4157dedd5a1bf5f5ced20c391",
+    "notebooks/pacman_kev_lab.ipynb": "a71087f1700bcc2ec49689eaaa13e1422026e6e4191580a98aa645a40680bcce",
     "games/pacman.html": "041ac2da9fc402e55e347c5e2bc572a501dfac52ddc827aecdfcac096b777c07",
     "slides/pacman-lab.pdf": "247ab2486d791f566ec80367ec86d95a34a28ab85b9f8cd7dc3757ae37c4462a",
     "slides/pacman-lab.pptx": "dace41d2e807fc7b8844b68fe9d307e13e811b60b1dacfb396fbcf4c3b1c5301",
