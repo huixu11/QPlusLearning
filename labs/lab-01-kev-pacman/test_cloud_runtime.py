@@ -1,5 +1,7 @@
 """Check hardware admission and the published-to-domain checkpoint transition."""
+import hashlib
 import json
+import math
 from pathlib import Path
 from itertools import product
 import shutil
@@ -9,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION
-from training_stages import specifications
+from training_stages import backup_checkpoint, inspect_checkpoint, specifications
 
 ROOT = Path(__file__).resolve().parent
 
@@ -22,6 +24,133 @@ def checkpoint_files(folder):
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def test_missing_intermediate_data_is_verified_before_training_launch(self):
+        content = b'{"record":1}\n'
+        spec = {'data': 'evals/documents-v1/train.jsonl', 'records': 1,
+                'sha256': hashlib.sha256(content).hexdigest()}
+        for mode in ('download', 'cached', 'corrupt', 'download_failure'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder)
+                data = runtime.repo / spec['data']
+                output = Path(folder) / 'documents'
+                if mode in ('cached', 'corrupt'):
+                    data.parent.mkdir(parents=True)
+                    data.write_bytes(content if mode == 'cached' else b'changed')
+                def prepare():
+                    if mode == 'download_failure':
+                        raise RuntimeError('dataset download failed')
+                    data.parent.mkdir(parents=True)
+                    data.write_bytes(content)
+                def launch(*args, **kwargs):
+                    self.assertEqual(data.read_bytes(), content)
+                    return output
+                with patch('cloud_runtime.specifications', return_value={'documents': spec}), \
+                        patch.object(runtime, 'intermediate_command', return_value=['command']), \
+                        patch.object(runtime, 'prepare_intermediate_data', side_effect=prepare) as download, \
+                        patch.object(runtime, '_train', side_effect=launch) as train, patch('cloud_runtime.print'):
+                    if mode in ('corrupt', 'download_failure'):
+                        with self.assertRaises((ValueError, RuntimeError)):
+                            runtime.intermediate('documents', output, 'dates')
+                        train.assert_not_called()
+                    else:
+                        self.assertEqual(runtime.intermediate('documents', output, 'dates'), output)
+                        train.assert_called_once()
+                    self.assertEqual(download.call_count, int(mode in ('download', 'download_failure')))
+                self.assertFalse(output.exists())
+
+    def test_retry_preserves_empty_unstarted_output_and_requires_no_recovery(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            output = Path(folder) / 'documents'
+            output.mkdir()
+            runtime.training_preflight = {'result': 'bindings_verified'}
+            (runtime.workspace / 'optimized-training-preflight.json').write_text(json.dumps(runtime.training_preflight))
+            def train(*args, **kwargs):
+                self.assertFalse(output.exists())
+                self.assertNotIn('LAB_RESUME_FROM', kwargs['env'])
+                output.mkdir()
+                (output / 'training_metrics.json').write_text(json.dumps({'optimizer_steps': 1}))
+            with patch('cloud_runtime.stream_training', side_effect=train), patch('cloud_runtime.print'):
+                runtime._train(['python', '-m', 'kev.train', '--out', str(output)], output, 180, 'documents')
+            preserved = list(output.parent.glob('documents-empty-attempt-*'))
+            self.assertEqual(len(preserved), 1)
+            self.assertEqual(list(preserved[0].iterdir()), [])
+            self.assertIsNone(json.loads((output / 'run-evidence.json').read_text())['resumed_from'])
+
+    def test_empty_output_with_recovery_directory_is_not_replaced(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            output = Path(folder) / 'documents'
+            output.mkdir()
+            recovery = Path(str(output) + '-recovery')
+            recovery.mkdir()
+            marker = recovery / 'incomplete-save'
+            marker.write_bytes(b'keep')
+            with patch('cloud_runtime.stream_training') as train:
+                with self.assertRaisesRegex(RuntimeError, 'Choose a new checkpoint'):
+                    runtime._train([], output, 180, 'documents')
+                train.assert_not_called()
+            self.assertTrue(output.is_dir())
+            self.assertEqual(marker.read_bytes(), b'keep')
+            self.assertFalse(list(output.parent.glob('documents-empty-attempt-*')))
+
+    def test_notebook_continues_from_completed_dates_without_earlier_training_cells(self):
+        notebook = json.loads((ROOT / 'notebooks/pacman_kev_lab.ipynb').read_text())
+        sources = [''.join(cell['source']) for cell in notebook['cells'] if cell['cell_type'] == 'code']
+        selected = [next(source for source in sources if source.startswith(prefix)) for prefix in
+                    ('DOCUMENTS =', 'SKILLS =', 'SKILLS_ARCHIVE =')]
+        meta = {'base': BASE_MODEL, 'base_revision': BASE_REVISION, 'lora': 16,
+                'head_dim': 256, 'option_isolation': False, 'special_embeddings': False,
+                'weights_dtype': 'fp32', 'weights': 'lora'}
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(Path(folder) / 'lab')
+            spec = specifications()
+            for stage in spec.values():
+                content = b'{"fixture":true}\n' * stage['records']
+                data = runtime.repo / stage['data']
+                data.parent.mkdir(parents=True, exist_ok=True)
+                data.write_bytes(content)
+                stage['sha256'] = hashlib.sha256(content).hexdigest()
+            runtime.training_preflight = {'result': 'bindings_verified'}
+            (runtime.workspace / 'optimized-training-preflight.json').write_text(json.dumps(runtime.training_preflight))
+            root = runtime.workspace / 'checkpoints'
+            dates = root / 'kev-4b-dates'
+            def completed(stage, output, parent):
+                checkpoint_files(output)
+                args = {**runtime.selected_recipe(spec[stage]['args']), 'max_steps': 0}
+                requests = spec[stage]['records'] + spec[stage]['replay']
+                metrics = {'optimizer_steps': math.ceil(requests / (args['batch'] * args['accum'])),
+                           'requested_records': requests, 'records_seen': requests,
+                           'peak_device_bytes': 0, 'world_size': 1}
+                (output / 'training_config.json').write_text(json.dumps({'args': args, 'init_source': str(parent)}))
+                (output / 'training_metrics.json').write_text(json.dumps(metrics))
+            completed('dates', dates, root / 'kev-4b-initial')
+            (dates / 'run-evidence.json').write_text(json.dumps({'stage': 'dates'}))
+            original_date_files = {file.name: file.read_bytes() for file in dates.iterdir()}
+            namespace = {'runtime': runtime, 'LAB_DIR': runtime.workspace, 'CHECKPOINT_ROOT': root,
+                         'STAGE_OWNERS': {}, 'Path': Path, 'json': json,
+                         'specifications': lambda: spec, 'inspect_checkpoint': inspect_checkpoint,
+                         'backup_checkpoint': backup_checkpoint, 'print': lambda *args, **kwargs: None}
+            def train(command, **kwargs):
+                flags = dict(zip(command[3::2], command[4::2]))
+                completed(kwargs['stage'], Path(flags['--out']), Path(flags['--init_from']))
+            with patch('cloud_runtime.specifications', return_value=spec), \
+                    patch('cloud_runtime.subprocess.check_output', return_value=json.dumps(meta)), \
+                    patch('cloud_runtime.stream_training', side_effect=train) as launches, \
+                    patch.object(runtime, 'start', return_value={'data': []}) as serve:
+                for source in selected:
+                    exec(compile(source, '<notebook dates-only continuation>', 'exec'), namespace)
+            self.assertEqual([call.kwargs['stage'] for call in launches.call_args_list], ['documents', 'skills'])
+            self.assertEqual(namespace['missing_stage_archives'], ['initial'])
+            self.assertIsNone(namespace['initial_metrics'])
+            self.assertEqual(namespace['stage_metrics']['dates']['optimizer_steps'], 429)
+            self.assertEqual(namespace['stage_metrics']['documents']['optimizer_steps'], 903)
+            self.assertEqual(namespace['stage_metrics']['skills']['optimizer_steps'], 1915)
+            self.assertEqual(namespace['STAGE_OWNERS'], dict.fromkeys(('dates', 'documents', 'skills'), 'learner'))
+            serve.assert_called_once_with(root / 'kev-4b-skills')
+            self.assertEqual(original_date_files, {file.name: file.read_bytes() for file in dates.iterdir()})
+            self.assertFalse(Path(str(dates) + '-recovery').exists())
+
     def test_missing_or_partial_parent_explains_stage_one_prerequisite(self):
         with tempfile.TemporaryDirectory() as folder:
             runtime = CloudRuntime(folder)

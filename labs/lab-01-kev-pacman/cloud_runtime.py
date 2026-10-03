@@ -14,7 +14,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from training_monitor import stream_training
-from training_stages import checkpoint_fingerprint, specifications
+from training_stages import checkpoint_fingerprint, specifications, verify_data
 from lora_recovery import latest_snapshot
 from optimized_training import install_kernels, file_hash
 from checkpoint_backup import save_backup, restore_backup
@@ -282,6 +282,12 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
 
     def intermediate(self, stage, output, init_from, timeout_minutes=180, resume=False):
         command = self.intermediate_command(stage, output, init_from)
+        spec = specifications()[stage]
+        data = self.repo / spec['data']
+        if not data.is_file():
+            print(f'Preparing missing {stage} training data before loading the GPU model: {data}', flush=True)
+            self.prepare_intermediate_data()
+        verify_data(data, spec)
         return self._train(command, output, timeout_minutes, stage, resume=resume)
 
     def start(self, run=MODEL_RUN):
@@ -383,6 +389,10 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                                + instruction + "If you intended recovery, restore the backup first.")
         if snapshot is not None and not (snapshot / "recovery.pt").is_file():
             raise ValueError("Selected recovery snapshot is missing recovery.pt; training will not start fresh.")
+        if (not resume and output.is_dir() and not any(output.iterdir()) and not recovery_root.exists()):
+            preserved = output.with_name(output.name + '-empty-attempt-' + uuid.uuid4().hex[:8])
+            output.rename(preserved)
+            print(f'Preserved empty output from an unstarted attempt: {preserved}', flush=True)
         if (output.exists() or recovery_root.exists()) and not resume:
             raise RuntimeError("Choose a new checkpoint output directory, or resume=True for a run with recovery snapshots.")
         if resume and (output / "run-evidence.json").exists():

@@ -32,6 +32,10 @@ For a running initial stage, wait for a recovery save and interrupt the cell. Ke
 
 On a fresh runtime without a restored checkpoint, complete **Stage 1** before running dates. Setup downloads the pretrained backbone; Stage 1 creates the initial trained LoRA/head checkpoint that dates must load. An older saved notebook may still explicitly request `'latest'`: change `RESUME_CHECKPOINT` to `None` **inside the Stage 1 cell** for a fresh run. Checkpoint handoff errors now name the missing stage or show the native reader's stderr instead of hiding it behind `CalledProcessError`.
 
+To continue from a **completed dates checkpoint**, copy its native files directly into `checkpoints/kev-4b-dates` (or set `DATES` inside the documents cell to its restored folder). Run runtime setup, optimized preparation and storage, then start **Stage 3 documents**; the Stage 1/2 training cells and dates recovery files are unnecessary. Later cells import their own recovery helper and read saved configurations/metrics from disk. Missing older stage archives are identified in the comparison and submission rather than treated as available.
+
+Intermediate training automatically prepares missing curriculum data and verifies its pinned checksum and record count **before loading the GPU model**. You can also run `runtime.prepare_intermediate_data()` ahead of time. An empty output folder left by a failure before data loading is preserved under a unique `-empty-attempt-*` name so the same stage can retry. Nonempty outputs and recovery directories remain protected.
+
 Stages 1–4 each have a separate run cell, checkpoint, backup ZIP, restore control and TensorBoard directory. Each has a configurable 180-minute attempt cap, a scheduling limit rather than a prediction. Keep all four checkpoints before class. Stage 4 is the class baseline. The notebook checks full optimizer-step counts, recipe/data pins, parent fingerprints and learner/instructor ownership. Kev's records-seen count includes augmented siblings and may exceed requested source records.
 
 | Minutes | Activity | Evidence |

@@ -90,12 +90,19 @@ importlib.invalidate_caches()
 for name in ['cloud_runtime', 'training_monitor', 'lora_recovery', 'checkpoint_backup', 'optimized_training', 'training_stages', 'pacman_lab', 'api_client']:
     sys.modules.pop(name, None)
 from cloud_runtime import CloudRuntime
+from lora_recovery import latest_snapshot
 from training_stages import specifications, inspect_checkpoint, restore_checkpoint, backup_checkpoint
 from pacman_lab import *
 from api_client import call, distribution
 SOURCE_HTML = (LAB_DIR / 'vendor/jev-pacman/index.html').read_text()
 MAZE = maze_from_html(SOURCE_HTML)
 runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
+CHECKPOINT_ROOT = LAB_DIR / 'checkpoints'
+INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
+DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
+DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
+SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
+STAGES = specifications()
 manifest = make_data(SOURCE_HTML, LAB_DIR / 'data')
 GAME = notebook_game(SOURCE_HTML, (LAB_DIR / 'games/player-controller.js').read_text(), (LAB_DIR / 'vendor/jev-pacman/LICENSE').read_text())
 STAGE_OWNERS = {}
@@ -258,14 +265,16 @@ print({name: {'new_records': stage['records'], 'replay_records': stage['replay']
 
 Warm-start from your **completed Stage 1** checkpoint. On a fresh runtime without a restored checkpoint, run Stage 1 to completion first; setup/model downloads do not create this trained checkpoint. Use 1,425 generated records (900 date-policy cases, 255 missing-fact cases and 270 intact controls) plus 2,000 replayed `decision-v7` training records. Published settings: one epoch, learning rate 2e-5, batch 4, accumulation 2, gradient checkpointing, BF16, seed 1 and 25% none minimal pairs. This is a separate run and a separate checkpoint. Its 180-minute attempt cap is a scheduling limit pending GPU measurements.""")
     code("""DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
+from lora_recovery import latest_snapshot
+STAGES = specifications()
 RESUME_DATES = latest_snapshot(Path(str(DATES) + '-recovery')) is not None
-print('Dates command:', runtime.intermediate_command('dates', DATES, INITIAL), flush=True)
 RESTORE_DATES_ARCHIVE = None
 RESTORED_DATES_OWNER = 'learner'
 if RESTORE_DATES_ARCHIVE is None:
     if (DATES / 'run-evidence.json').is_file():
         print('Using completed dates checkpoint:', DATES)
     else:
+        print('Dates command:', runtime.intermediate_command('dates', DATES, INITIAL), flush=True)
         runtime.intermediate('dates', DATES, init_from=INITIAL, resume=RESUME_DATES)
     STAGE_OWNERS['dates'] = 'learner'
 else:
@@ -281,16 +290,20 @@ except ImportError:
 else:
     files.download(str(DATES_ARCHIVE))
 """)
-    md('## Stage 3 — Documents (prework)\n\nWarm-start from **Stage 2**. Use 5,219 consumer-finance complaint records plus 2,000 replayed decision-v7 training records. Published settings: one epoch, learning rate 2e-5, batch 2 × accumulation 4, BF16, FP32 stored weights, state budget 7,552, gradient checkpointing, seed 2 and 25% none minimal pairs. Expect 903 optimizer steps. The memory profile uses batch 1 × accumulation 8 with bounded row passes. Save this checkpoint before continuing; documents and skills are separate in Kev-4B.')
+    md('## Stage 3 — Documents (prework)\n\nWarm-start from **Stage 2**. If you restored a completed dates checkpoint, run runtime setup, optimized preparation, storage and intermediate-data preparation, then start here. You can skip the Stage 1/2 training cells; recovery files are not needed to initialize documents. Set `DATES` to the restored folder below. Earlier stage archives that are unavailable are reported as missing in the comparison/export.\n\nUse 5,219 consumer-finance complaint records plus 2,000 replayed decision-v7 training records. Published settings: one epoch, learning rate 2e-5, batch 2 × accumulation 4, BF16, FP32 stored weights, state budget 7,552, gradient checkpointing, seed 2 and 25% none minimal pairs. Expect 903 optimizer steps. The memory profile uses batch 1 × accumulation 8 with bounded row passes. Save this checkpoint before continuing; documents and skills are separate in Kev-4B.')
     code("""DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
+from lora_recovery import latest_snapshot
+STAGES = specifications()
+DATES = CHECKPOINT_ROOT / 'kev-4b-dates'  # Set this to your completed dates folder
+STAGE_OWNERS.setdefault('dates', 'learner')  # 'instructor' for a supplied checkpoint
 RESUME_DOCUMENTS = latest_snapshot(Path(str(DOCUMENTS) + '-recovery')) is not None
-print('Documents command:', runtime.intermediate_command('documents', DOCUMENTS, DATES), flush=True)
 RESTORE_DOCUMENTS_ARCHIVE = None
 RESTORED_DOCUMENTS_OWNER = 'learner'
 if RESTORE_DOCUMENTS_ARCHIVE is None:
     if (DOCUMENTS / 'run-evidence.json').is_file():
         print('Using completed documents checkpoint:', DOCUMENTS)
     else:
+        print('Documents command:', runtime.intermediate_command('documents', DOCUMENTS, DATES), flush=True)
         runtime.intermediate('documents', DOCUMENTS, init_from=DATES, resume=RESUME_DOCUMENTS)
     STAGE_OWNERS['documents'] = 'learner'
 else:
@@ -312,14 +325,16 @@ Warm-start from **Stage 3 documents**. Use 6,000 generated skill records plus 5,
 
 A 4B model still uses hybrid DeltaNet/full attention and needs optimized kernels. Start fresh from the pinned 4B base; 0.8B adapters cannot initialize this curriculum. Published H100/H200 timings do not predict this GPU's duration.""")
     code("""SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
+from lora_recovery import latest_snapshot
+STAGES = specifications()
 RESUME_SKILLS = latest_snapshot(Path(str(SKILLS) + '-recovery')) is not None
-print('Skills and developer tools command:', runtime.intermediate_command('skills', SKILLS, DOCUMENTS), flush=True)
 RESTORE_SKILLS_ARCHIVE = None
 RESTORED_SKILLS_OWNER = 'learner'
 if RESTORE_SKILLS_ARCHIVE is None:
     if (SKILLS / 'run-evidence.json').is_file():
         print('Using completed skills checkpoint:', SKILLS)
     else:
+        print('Skills and developer tools command:', runtime.intermediate_command('skills', SKILLS, DOCUMENTS), flush=True)
         runtime.intermediate('skills', SKILLS, init_from=DOCUMENTS, resume=RESUME_SKILLS)
     STAGE_OWNERS['skills'] = 'learner'
 else:
@@ -335,7 +350,18 @@ except ImportError:
 else:
     files.download(str(SKILLS_ARCHIVE))
 GENERAL = SKILLS
-stage_metrics = {'initial': initial_metrics, 'dates': dates_metrics, 'documents': documents_metrics, 'skills': skills_metrics}
+INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
+stage_checkpoints = {'initial': INITIAL, 'dates': DATES, 'documents': DOCUMENTS, 'skills': SKILLS}
+stage_metrics, stage_configs = {}, {}
+for stage, folder in stage_checkpoints.items():
+    config_path, metrics_path = folder / 'training_config.json', folder / 'training_metrics.json'
+    stage_configs[stage] = json.loads(config_path.read_text()) if config_path.is_file() else None
+    stage_metrics[stage] = json.loads(metrics_path.read_text()) if metrics_path.is_file() else None
+initial_config, dates_config, documents_config, skills_config = [stage_configs[name] for name in stage_checkpoints]
+initial_metrics, dates_metrics, documents_metrics, skills_metrics = [stage_metrics[name] for name in stage_checkpoints]
+missing_stage_archives = [stage for stage, folder in stage_checkpoints.items()
+                         if not (folder / 'head.pt').is_file() or not list(folder.glob('adapter_model.*'))]
+print('Earlier stage archives unavailable:', missing_stage_archives)
 models = runtime.start(GENERAL)
 print(json.dumps(models, indent=2))
 """)
@@ -406,6 +432,7 @@ Warm-start from **your Stage 4 skills/devtools checkpoint**, using Kev's documen
 The helper reads architecture from the checkpoint and stops inference to free GPU memory. Use a new checkpoint directory. A timed GPU preflight is still required; successful execution or improved play has not been established by this draft.""")
     code("""print(json.dumps(training[0], indent=2))
 CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman'
+from lora_recovery import latest_snapshot
 RESUME_PACMAN = latest_snapshot(Path(str(CHECKPOINT) + '-recovery')) is not None
 if (CHECKPOINT / 'run-evidence.json').is_file():
     evidence = json.loads((CHECKPOINT / 'run-evidence.json').read_text())
@@ -428,7 +455,7 @@ before_run = rollout(MAZE, max_turns=24)
 runtime.start(checkpoint)
 after = evaluate(LAB_DIR / 'data/pacman-evaluation.jsonl')
 after_run = rollout(MAZE, max_turns=24)
-comparison = {'base_model': audit['base'], 'base_revision': audit['base_revision'], 'baseline_checkpoint': str(GENERAL), 'checkpoint_owners': STAGE_OWNERS, 'fine_tuned_checkpoint': str(checkpoint), 'before': before, 'after': after, 'rollouts': {'general': before_run, 'fine_tuned': after_run}, 'general_training_stages': stage_metrics, 'pacman_training': metrics, 'runtime': runtime.gpu}
+comparison = {'base_model': audit['base'], 'base_revision': audit['base_revision'], 'baseline_checkpoint': str(GENERAL), 'checkpoint_owners': STAGE_OWNERS, 'fine_tuned_checkpoint': str(checkpoint), 'before': before, 'after': after, 'rollouts': {'general': before_run, 'fine_tuned': after_run}, 'general_training_stages': stage_metrics, 'missing_general_stage_archives': missing_stage_archives, 'pacman_training': metrics, 'runtime': runtime.gpu}
 (LAB_DIR / 'comparison.json').write_text(json.dumps(comparison, indent=2))
 for name, result in [('general', before), ('fine_tuned', after)]:
     print(name, 'accuracy', result['accuracy'], 'immediate captures', result['caught_next_turn'])
@@ -452,9 +479,10 @@ print('rules', {k:rule_run[k] for k in ['turns','dots_collected','outcome']})
 
 Explain one changed move and one confident mistake. Trace `kev/api.py:to_record`, `kev/model.py:encode` / `PointerHead`, and `kev/train.py`. The lecture's CLM uses separate state/action representations and InfoNCE; Kev scores option-token representations with a pointer head and supervised cross-entropy. They are related decision systems with different training architectures.
 
-Submit the executed notebook, reviewed training JSONL, `comparison.json`, all five small adapter/head checkpoints, all stage configurations/metrics, training logs and TensorBoard events and `runtime-preflight.json`. Record the Colab compute units consumed and elapsed GPU time from your session. Save outputs before the temporary runtime disconnects, then stop the server. On Colab, run the download cell.""")
+Submit the executed notebook, reviewed training JSONL, `comparison.json`, all available small adapter/head checkpoints and stage configurations/metrics, training logs and TensorBoard events and `runtime-preflight.json`. A full fresh run produces five checkpoints. If you continued from a completed intermediate checkpoint without older archives, record those missing stages; the imported checkpoint retains its recorded parent provenance, but absent parent weights cannot be rechecked or exported. Record the Colab compute units consumed and elapsed GPU time from your session. Save outputs before the temporary runtime disconnects, then stop the server. On Colab, run the download cell.""")
     code("""runtime.stop()
 archive = str(LAB_DIR.parent / 'pacman-lab-submission.zip')
+print('Unavailable earlier stage archives:', missing_stage_archives)
 # Export small adapters/heads and results, without foundation weights or packages.
 import zipfile
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as out:
