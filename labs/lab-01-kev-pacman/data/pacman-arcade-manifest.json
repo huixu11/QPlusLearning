@@ -1,0 +1,47 @@
+{
+  "counts": {
+    "train": 64,
+    "development": 16,
+    "evaluation": 16
+  },
+  "groups": {
+    "train": [
+      "arcade-episode-0001",
+      "arcade-episode-0002",
+      "arcade-episode-0003",
+      "arcade-episode-0004",
+      "arcade-episode-0005",
+      "arcade-episode-0006"
+    ],
+    "development": [
+      "arcade-episode-0007"
+    ],
+    "evaluation": [
+      "arcade-episode-0008"
+    ]
+  },
+  "labels": {
+    "train": {
+      "up": 17,
+      "left": 22,
+      "down": 11,
+      "right": 14
+    },
+    "development": {
+      "up": 4,
+      "left": 4,
+      "down": 3,
+      "right": 5
+    },
+    "evaluation": {
+      "up": 3,
+      "left": 4,
+      "down": 2,
+      "right": 7
+    }
+  },
+  "seed": 7,
+  "game_commit": "7407174c1d6a38be8cd230577489e39e0873145b",
+  "label_policy": "Control Pac-Man in classic arcade Pac-Man. Collect pellets and fruit, use power pellets to eat frightened ghosts, and avoid dangerous ghosts. All four ghosts follow the arcade engine. Prefer uncollected pellets reachable by safe maze paths; avoid repeatedly revisiting the same tiles or reversing without progress. Use the recent positions, ghost modes and legal moves. Select one supplied direction.",
+  "interpretation": "Valid seeded arcade trajectories on one maze; episode-disjoint imitation labels, not human demonstrations or a win-rate benchmark."
+}

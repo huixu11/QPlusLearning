@@ -6,10 +6,10 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SOURCE = ROOT / "vendor/jev-pacman"
 HELPERS = ["api_client.py", "pacman_lab.py", "cloud_runtime.py", "training_monitor.py",
-           "lora_recovery.py", "checkpoint_backup.py", "optimized_training.py", "training-kernels.json", "training_stages.py", "training-stages.json", "games/player-controller.js",
-           "vendor/jev-pacman/index.html", "vendor/jev-pacman/LICENSE"]
+           "lora_recovery.py", "checkpoint_backup.py", "optimized_training.py", "training-kernels.json", "training_stages.py", "training-stages.json", "games/arcade-engine.js", "games/arcade-worker.js", "games/arcade-browser.js", "games/arcade-shell.html",
+           "vendor/arcade-pacman/source.json", "vendor/arcade-pacman/source.zip",
+           "data/pacman-arcade-train.jsonl", "data/pacman-arcade-development.jsonl", "data/pacman-arcade-evaluation.jsonl", "data/pacman-arcade-manifest.json"]
 
 
 def source_lock(pin=False):
@@ -43,7 +43,7 @@ def notebook():
 
 Follow Kev's published **LoRA plus pointer-head** architecture. First train a fresh decision model from `Qwen/Qwen3.5-4B-Base` on the frozen `decision-v7` training suite. Continue through separate dates/missing-evidence, documents, and skills/devtools stages, then fine-tune your own adapter and head on Pac-Man labels. Original base matrices stay frozen, and LoRA changes the encoder's effective features. This is initial decision-model training over an already pretrained LLM.
 
-**You train Pac-Man. Ghosts follow deterministic game code.** Start with the community browser game's maze and renderer, then use Kev to select the player's legal moves. This adaptation changes the original community demo, where Jev controls the ghosts.
+**You train Pac-Man. Four ghosts use the classic arcade engine.** The faithful browser recreation supplies the classic maze, original renderer/font/sounds, power pellets, fruit, tunnels, lives and chase/scatter phases. Kev chooses player directions; upstream code controls Blinky, Pinky, Inky and Clyde.
 
 0–10 compare architectures and play; 10–20 inspect initial training; 20–30 prepare player labels; **30–60 mandatory fine-tuning**; 60–80 compare; 80–90 debrief. Installation, downloads and the four general-decision training stages are prework, so we can keep the published recipe and the 90-minute class.
 
@@ -53,7 +53,7 @@ The notebook separates **Stage 1: initial decision training → Stage 2: dates/m
 
     md("""## Game provenance
 
-Game source: [codaaiteam/jev-pacman](https://github.com/codaaiteam/jev-pacman), MIT, pinned `8446fe74690cd61909bda91acfadbccb0f02b422`. Model source: [jaredpalmer/kev](https://github.com/jaredpalmer/kev). The model receives structured state, not screenshots. No ROM or paid API key is required for the notebook path.""")
+Game source: [masonicGIT/pacman](https://github.com/masonicGIT/pacman), GPL-3.0, pinned `7407174c1d6a38be8cd230577489e39e0873145b`. Its source/assets are unchanged; the author documents small [accuracy differences](https://github.com/masonicGIT/pacman#accuracy). Browser and CPU evaluation execute this same arcade engine. Model source: [jaredpalmer/kev](https://github.com/jaredpalmer/kev). The model receives structured state, not screenshots. Inference stays inside the GPU runtime. The board identifies the active adapter, stage, steps, rank and checkpoint hashes.""")
     md("""## Prework: prepare the runtime
 
 Save your own copy of this notebook in Colab. Open **Runtime > Change runtime type**, select the RTX PRO 6000 Blackwell option if your account offers it, then connect. Run the prework cells before class. Confirm the GPU name rather than relying on a menu label. A different allocation requires an instructor-approved, timed fallback.
@@ -94,8 +94,7 @@ from lora_recovery import latest_snapshot
 from training_stages import specifications, inspect_checkpoint, restore_checkpoint, backup_checkpoint
 from pacman_lab import *
 from api_client import call, distribution
-SOURCE_HTML = (LAB_DIR / 'vendor/jev-pacman/index.html').read_text()
-MAZE = maze_from_html(SOURCE_HTML)
+ensure_node(LAB_DIR)
 runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
 CHECKPOINT_ROOT = LAB_DIR / 'checkpoints'
 INITIAL = CHECKPOINT_ROOT / 'kev-4b-initial'
@@ -103,12 +102,12 @@ DATES = CHECKPOINT_ROOT / 'kev-4b-dates'
 DOCUMENTS = CHECKPOINT_ROOT / 'kev-4b-documents'
 SKILLS = CHECKPOINT_ROOT / 'kev-4b-skills'
 STAGES = specifications()
-manifest = make_data(SOURCE_HTML, LAB_DIR / 'data')
-GAME = notebook_game(SOURCE_HTML, (LAB_DIR / 'games/player-controller.js').read_text(), (LAB_DIR / 'vendor/jev-pacman/LICENSE').read_text())
+manifest = json.loads((LAB_DIR / 'data/pacman-arcade-manifest.json').read_text())
+GAME = notebook_game()
 STAGE_OWNERS = {}
-print('Prepared player controller and disjoint synthetic snapshots.')
+print('Prepared classic arcade engine, four ghosts and episode-disjoint player snapshots.')
 """)
-    md("""Setup fetches thirteen small files from a specific course commit and verifies every SHA-256. Their readable source is in GitHub. The previous embedded source dictionary was a portability mechanism; it is not model input or training data. This notebook now needs network access to fetch helpers on first use.
+    md("""Setup fetches readable helpers, four starter-data files and a 9.7 MB archive of original game source/assets, verifying every SHA-256. Node.js executes that same engine for Python evaluation; Colab installs a checksum-pinned official Node binary only if needed, separate from Torch. Cached downloads are reused. Network access is needed on first use.
 
 ## Training monitor: open TensorBoard before running any stage
 
@@ -396,25 +395,28 @@ print(json.dumps(models, indent=2))
 Kev's release fitted one probability temperature after its four training stages. We do not copy that fitted value into freshly trained checkpoints. This notebook keeps their own raw probabilities. A workload calibration experiment needs suitable held-out labels and is outside the mandatory 30-minute Pac-Man fine-tuning block. It does not update LoRA/head weights or change the top-ranked action.""")
     md("""## CP0: play, then give Kev the controls (0–10 minutes)
 
-Try **Human** mode with arrows/WASD. Restart, select **Kev**, and watch its choices. The ghosts move after every second player turn. The whole simulation waits for each model answer; wall-clock survival is therefore not a fair skill metric. Pause the board before running training cells.
+Try **Human** mode with arrows/WASD; click the board for keyboard focus. Restart, select **Kev**, and watch its choices. Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing a direction at each tile center, then player and all four ghosts advance using upstream speeds/timers. Wall-clock survival is not a fair skill metric. Pause before running training cells.
+
+The **Active LoRA + pointer head** badge should show `kev-4b-skills` at CP0: general Skills training, no Pac-Man fine-tuning. CP4 loads `kev-4b-pacman-arcade`. Expand the details for paths and SHA-256 fingerprints. The badge and traces verify the serving model card; `kev-latest` alone is an API alias.
 
 Colab supplies the notebook callback below. On Kaggle, use the structured decision cell and Python rollouts instead. API errors pause visibly; the game does not replace failed player decisions with a hidden rules controller.""")
     code("""from IPython.display import display, HTML, JSON
-bridge = NotebookBridge(LAB_DIR / 'results/player-trace.jsonl')
+bridge = NotebookBridge(LAB_DIR / 'results/player-trace.jsonl', runtime.active_model_info)
 try:
     from google.colab import output
 except ImportError:
     print('Kaggle/local: continue with the decision and rollout cells below.')
 else:
     output.register_callback('pacman.decide', lambda state: JSON(bridge.decide(state)))
+    output.register_callback('pacman.model', lambda: JSON(bridge.model()))
     display(HTML(GAME))
 """)
     md("""## CP1: inspect the training stages and a player decision (10–20 minutes)
 
 Inspect `initial_config`, `dates_config`, `documents_config`, `skills_config`, `stage_metrics` and `trainable-parameters.json`. Open TensorBoard and compare the four separate runs. Find the fresh pointer head, trainable LoRA parameters and fixed original base matrices. Explain why gradients still travel through the encoder. The four general stages learn typed decisions, dates/evidence, documents, and skills/devtools; none has seen Pac-Man labels.
 
-Predict the move first. Identify the player, two ghosts, remaining dots and legal options. Explain why a direction through a wall never appears. The game consumes `answers.move.choice`; inspect probabilities by direction name. Confidence is not the probability of clearing the maze.""")
-    code("""state = initial_state(MAZE)
+Predict the move first. Identify Pac-Man, all four named ghosts, their modes, pellets, recent positions and legal options. Explain why a direction through a wall never appears. The game consumes `answers.move.choice`; inspect probabilities by direction name. Confidence is not the probability of clearing the maze.""")
+    code("""state = initial_state()
 request = body(state)
 print('Player:', state['player'], '\\nGhosts:', state['ghosts'])
 print('Options:', request['questions']['move']['criteria'])
@@ -424,17 +426,17 @@ print(json.dumps(response['answers'], indent=2), '\\nHTTP ms:', round(elapsed))
 """)
     md("""## CP2: inspect and edit labels (20–30 minutes)
 
-Starter data has **64 training, 16 development, 16 evaluation** snapshots. Labels come from a stated heuristic: avoid immediate capture, approach a dot by maze distance, prefer distance from ghosts, then use a fixed tie order. These are synthetic labels, not recorded human expertise.
+Starter data has **64 training, 16 development, 16 evaluation** snapshots from valid seeded trajectories in the same engine. Labels use a transparent heuristic: avoid nearby dangerous ghosts, approach pellets by maze distance, penalize recently repeated tiles, prefer ghost separation, then fixed direction ties. These are synthetic imitation labels, not recorded human expertise. `_meta.replay` reconstructs exact engine state for evaluation and is excluded from model input.
 
-Inspect three training boards and enter your own legal move labels in `EDITS` before checking the teacher. Keep all edits in the training partition. Fix the training file and one candidate before opening evaluation data. Positions are disjoint across splits, but every split uses the same maze.""")
-    code("""training_file = LAB_DIR / 'data/pacman-train-reviewed.jsonl'
-label_source = training_file if training_file.is_file() else LAB_DIR / 'data/pacman-train.jsonl'
+Inspect three training boards and enter your own legal move labels in `EDITS` before checking the teacher. Keep all edits in the training partition. Fix the training file and one candidate before opening evaluation data. Whole episodes and observable snapshots are disjoint across splits; every split uses the classic maze. New `pacman-arcade-*` files preserve earlier simplified-game labels. Train a fresh Pac-Man adapter from Skills for this game.""")
+    code("""training_file = LAB_DIR / 'data/pacman-arcade-train-reviewed.jsonl'
+label_source = training_file if training_file.is_file() else LAB_DIR / 'data/pacman-arcade-train.jsonl'
 training = [json.loads(line) for line in label_source.read_text().splitlines()]
 print('Training labels:', label_source)
 for row in training[:3]:
     print(row['_meta']['id'], json.dumps(row['state'], indent=2))
     print('Legal:', list(row['questions']['move']['criteria']))
-EDITS = {}  # Example after inspecting a board: {'board-000': 'left'}
+EDITS = {}  # Example after inspecting a board: {'train-board-000': 'left'}
 assert set(EDITS).issubset({r['_meta']['id'] for r in training}), 'Unknown training board ID'
 for row in training:
     if row['_meta']['id'] in EDITS:
@@ -446,7 +448,7 @@ if EDITS or not training_file.is_file():
     training_file.write_text(''.join(json.dumps(row) + '\\n' for row in training))
 print('Teacher labels for inspected boards:', [(r['_meta']['id'], r['questions']['move']['label']) for r in training[:3]])
 print('Split sizes:', manifest['counts'])
-before_dev = evaluate(LAB_DIR / 'data/pacman-development.jsonl')
+before_dev = evaluate(LAB_DIR / 'data/pacman-arcade-development.jsonl')
 print('Development accuracy:', before_dev['accuracy'])
 """)
     md("""## Stage 5 / CP3: fine-tune Pac-Man decisions (30–60 minutes)
@@ -455,9 +457,9 @@ print('Development accuracy:', before_dev['accuracy'])
 
 Warm-start from **your Stage 4 skills/devtools checkpoint**, using Kev's documented custom-data settings: learning rate 2e-5, batch 1, accumulation 8, BF16 autocast and gradient checkpointing. With 64 accepted rows, this gives 16 optimizer steps. The Pac-Man adaptation disables none/distractor insertion because the only valid outputs are legal player moves. Option shuffling remains active. This is a documented task-specific departure from the generic initial recipe.
 
-The helper reads architecture from the checkpoint and stops inference to free GPU memory. Use a new checkpoint directory. A timed GPU preflight is still required; successful execution or improved play has not been established by this draft.""")
+The helper reads architecture from the checkpoint and stops inference to free GPU memory. Use a new checkpoint directory. The classic board uses a 4,096-token state budget rather than the earlier simplified board's 2,048; truncation/rejected records fail the stage audit. A timed GPU preflight is still required; CPU checks do not establish improved play.""")
     code("""print(json.dumps(training[0], indent=2))
-CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman'
+CHECKPOINT = CHECKPOINT_ROOT / 'kev-4b-pacman-arcade'
 from lora_recovery import latest_snapshot
 RESUME_PACMAN = latest_snapshot(Path(str(CHECKPOINT) + '-recovery')) is not None
 if (CHECKPOINT / 'run-evidence.json').is_file():
@@ -469,37 +471,40 @@ else:
     checkpoint = runtime.finetune(training_file, CHECKPOINT, init_from=GENERAL, steps=0, resume=RESUME_PACMAN)
 metrics = json.loads((checkpoint / 'training_metrics.json').read_text())
 print(metrics)
-assert metrics['optimizer_steps'] > 0, 'Training must update the model'
+assert metrics['optimizer_steps'] == 16, 'Complete the 64-record, two-epoch Pac-Man stage'
+assert not metrics.get('truncated_records', 0) and not metrics.get('rejected_records', 0), 'No state truncation or dropped records'
 assert metrics['records_seen'] == metrics['requested_records'], 'Complete both epochs'
 """)
     md("""## CP4: before/after on the same decisions (60–72 minutes)
 
 The candidate is now fixed. Score both models on the same 16 evaluation snapshots and save predictions by ID. Report accuracy against the teacher and immediate captures after the selected moves. Sixteen boards on one maze do not establish general game skill. Fine-tuning may leave answers unchanged or make them worse.""")
     code("""runtime.start(GENERAL)
-before = evaluate(LAB_DIR / 'data/pacman-evaluation.jsonl')
-before_run = rollout(MAZE, max_turns=24)
+before = evaluate(LAB_DIR / 'data/pacman-arcade-evaluation.jsonl')
+before_identity = runtime.active_model_info()
+before_run = rollout(max_turns=128)
 runtime.start(checkpoint)
-after = evaluate(LAB_DIR / 'data/pacman-evaluation.jsonl')
-after_run = rollout(MAZE, max_turns=24)
-comparison = {'base_model': audit['base'], 'base_revision': audit['base_revision'], 'baseline_checkpoint': str(GENERAL), 'checkpoint_owners': STAGE_OWNERS, 'fine_tuned_checkpoint': str(checkpoint), 'before': before, 'after': after, 'rollouts': {'general': before_run, 'fine_tuned': after_run}, 'general_training_stages': stage_metrics, 'missing_general_stage_archives': missing_stage_archives, 'pacman_training': metrics, 'runtime': runtime.gpu}
+after = evaluate(LAB_DIR / 'data/pacman-arcade-evaluation.jsonl')
+after_identity = runtime.active_model_info()
+after_run = rollout(max_turns=128)
+comparison = {'base_model': audit['base'], 'base_revision': audit['base_revision'], 'baseline_checkpoint': str(GENERAL), 'checkpoint_owners': STAGE_OWNERS, 'fine_tuned_checkpoint': str(checkpoint), 'active_adapters': {'before': before_identity, 'after': after_identity}, 'before': before, 'after': after, 'rollouts': {'general': before_run, 'fine_tuned': after_run}, 'general_training_stages': stage_metrics, 'missing_general_stage_archives': missing_stage_archives, 'pacman_training': metrics, 'runtime': runtime.gpu}
 (LAB_DIR / 'comparison.json').write_text(json.dumps(comparison, indent=2))
 for name, result in [('general', before), ('fine_tuned', after)]:
     print(name, 'accuracy', result['accuracy'], 'immediate captures', result['caught_next_turn'])
 """)
     md("""## CP4 continued: watch Pac-Man play (72–80 minutes)
 
-Repeat the browser cell, choose **Kev**, and start a new game with the fine-tuned checkpoint active. Both Python rollouts above use the same starting board, ghost code and 24-turn cap. Compare dots and turns; these two trajectories are an illustration, not a win-rate estimate.
+Repeat CP0's browser cell, choose **Kev**, and start a new game. Confirm the badge says `kev-4b-pacman-arcade`, Pac-Man fine-tuned. Both Python rollouts use the same starting board, seed, original engine and 128-decision cap, stopping at the first lost life or completed level. The browser retains all three lives and level progression. Compare score, pellets, repeated tiles and decisions; these trajectories illustrate behavior, not a win-rate estimate.
 
 The starter teacher is also a useful rules baseline. It is deliberately simple and can get stuck. The model learns from structured state; there is no screenshot encoder or frame-by-frame RL training in this exercise.""")
     code("""for name, episode in [('general', before_run), ('fine_tuned', after_run)]:
-    print(name, {k:episode[k] for k in ['turns', 'dots_collected', 'outcome']})
+    print(name, {k:episode[k] for k in ['turns', 'dots_collected', 'score', 'repeated_tiles', 'outcome']})
 # Optional rules baseline using the same game mechanics:
 def rule_predict(request):
     chosen = teacher(request['state'])
     keys = request['questions']['move']['criteria']
     return {'answers': {'move': {'choice':chosen, 'probabilities':{k:float(k==chosen) for k in keys}}}}
-rule_run = rollout(MAZE, predict=rule_predict, max_turns=24)
-print('rules', {k:rule_run[k] for k in ['turns','dots_collected','outcome']})
+rule_run = rollout(predict=rule_predict, max_turns=128)
+print('rules', {k:rule_run[k] for k in ['turns','dots_collected','score','repeated_tiles','outcome']})
 """)
     md("""## CP5: explain and submit (80–90 minutes)
 
@@ -535,9 +540,7 @@ else:
 
 def game():
     from pacman_lab import notebook_game
-    html = notebook_game((SOURCE / 'index.html').read_text(),
-                         (ROOT / 'games/player-controller.js').read_text(),
-                         (SOURCE / 'LICENSE').read_text())
+    html = notebook_game()
     (ROOT / 'games/pacman.html').write_text(html)
 
 

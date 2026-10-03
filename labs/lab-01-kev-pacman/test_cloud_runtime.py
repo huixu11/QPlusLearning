@@ -1,5 +1,6 @@
 """Check hardware admission and the published-to-domain checkpoint transition."""
 import hashlib
+import io
 import json
 import math
 from pathlib import Path
@@ -8,7 +9,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from cloud_runtime import CloudRuntime, validate_gpu, BASE_MODEL, BASE_REVISION
 from training_stages import backup_checkpoint, inspect_checkpoint, specifications
@@ -24,6 +25,53 @@ def checkpoint_files(folder):
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def test_serving_identity_hashes_native_checkpoint_and_tracks_finetuned_stage(self):
+        for stage in ('skills', 'pacman'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as folder:
+                runtime = CloudRuntime(folder)
+                source = runtime.workspace / ('kev-4b-skills' if stage == 'skills' else 'kev-4b-pacman-arcade')
+                checkpoint_files(source)
+                (source / 'training_config.json').write_text(json.dumps({'args': {'base_revision': BASE_REVISION}}))
+                (source / 'training_metrics.json').write_text(json.dumps({'optimizer_steps': 1915 if stage == 'skills' else 16}))
+                (source / 'run-evidence.json').write_text(json.dumps({'stage': stage}))
+                card = {'name': 'kev-latest', 'run': str(source), 'base': BASE_MODEL, 'lora': 16,
+                        'dtype': 'torch.bfloat16', 'temperature': 1}
+                response = lambda *args, **kwargs: io.StringIO(json.dumps({'models': [card]}))
+                process = Mock(); process.poll.return_value = None
+                with patch('cloud_runtime.subprocess.Popen', return_value=process), \
+                        patch('cloud_runtime.urlopen', side_effect=response), patch('cloud_runtime.print'):
+                    runtime.start(source)
+                    info = runtime.active_model_info()
+                    self.assertEqual(info['checkpoint'], str(source))
+                    self.assertEqual(info['stage'], stage)
+                    self.assertEqual(info['lora_rank'], 16)
+                    self.assertEqual(info['pacman_fine_tuned'], stage == 'pacman')
+                    self.assertEqual(info['adapter_sha256'], hashlib.sha256(b'fixture').hexdigest())
+                    self.assertEqual(len(info['checkpoint_sha256']), 64)
+                    self.assertEqual(json.loads((runtime.workspace / 'active-checkpoint.json').read_text()), info)
+                    card['run'] = '/other/checkpoint'
+                    with self.assertRaisesRegex(RuntimeError, 'changed outside'):
+                        runtime.active_model_info()
+                    runtime.stop()
+
+    def test_missing_or_wrong_serving_checkpoint_never_gets_labelled_as_requested(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = CloudRuntime(folder)
+            source = runtime.workspace / 'kev-4b-skills'
+            with patch('cloud_runtime.subprocess.Popen') as launch:
+                with self.assertRaisesRegex(RuntimeError, 'no pointer head'):
+                    runtime.start(source)
+                launch.assert_not_called()
+            checkpoint_files(source)
+            card = {'name': 'kev-latest', 'run': 'runs/smoke'}
+            process = Mock(); process.poll.return_value = None
+            with patch('cloud_runtime.subprocess.Popen', return_value=process), \
+                    patch('cloud_runtime.urlopen', return_value=io.StringIO(json.dumps({'models': [card]}))):
+                with self.assertRaisesRegex(RuntimeError, 'instead of requested'):
+                    runtime.start(source)
+            self.assertIsNone(runtime.active_checkpoint)
+            process.terminate.assert_called_once()
+
     def test_missing_intermediate_data_is_verified_before_training_launch(self):
         content = b'{"record":1}\n'
         spec = {'data': 'evals/documents-v1/train.jsonl', 'records': 1,

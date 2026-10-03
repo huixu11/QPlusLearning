@@ -14,9 +14,9 @@
   "model_revision": "6cfce5c2fa4b4bd64026336ab649c5ca78857d52",
   "duration_minutes": 90,
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
-  "game_repository": "https://github.com/codaaiteam/jev-pacman",
-  "game_commit": "8446fe74690cd61909bda91acfadbccb0f02b422",
-  "game_license": "MIT",
+  "game_repository": "https://github.com/masonicGIT/pacman",
+  "game_commit": "7407174c1d6a38be8cd230577489e39e0873145b",
+  "game_license": "GPL-3.0",
   "lab_route": "Initial \u2192 dates/missing evidence \u2192 documents \u2192 skills/devtools \u2192 Pac-Man adaptation",
   "clm_repository": "https://github.com/Contrastive-LM/CLM",
   "clm_commit": "bb42c6c5bf914fd449bed2f6ca65be80602cb1f7",
@@ -38,5 +38,8 @@
   "general_stages_prework": true,
   "monitoring": "Per-step TensorBoard, JSONL, CSV and streamed console output",
   "calibration": "Not fitted; fresh runs do not inherit the release temperature",
-  "optimized_training": "Hash-pinned FLA 0.5.2 and causal-conv1d 1.7.0; SDPA; fused AdamW; required CUDA loss/backward preflight pending"
+  "optimized_training": "Hash-pinned FLA 0.5.2 and causal-conv1d 1.7.0; SDPA; fused AdamW; required CUDA loss/backward preflight pending",
+  "game_accuracy": "Faithful browser recreation with documented upstream differences",
+  "game_evaluation": "Same JavaScript engine in browser and Node CPU replay",
+  "pacman_state_budget": 4096
 }

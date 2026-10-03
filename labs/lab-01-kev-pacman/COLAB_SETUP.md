@@ -5,7 +5,7 @@ Target **one NVIDIA RTX PRO 6000 Blackwell GPU**, nominally 96 GB on the full Se
 ## Prework
 
 1. Open [Lab 1 in Colab](https://colab.research.google.com/github/yxc20089/QPlusLearning/blob/main/labs/lab-01-kev-pacman/notebooks/pacman_kev_lab.ipynb) and save a fresh copy. Select the target GPU if offered.
-2. Run setup. It downloads 12 hash-verified helpers/game files, installs pinned Kev in a separate Python 3.13 environment and adds the hash-pinned optimized training wheels without replacing locked dependencies.
+2. Run setup. It downloads hash-verified helpers, classic-game source/assets and starter data, installs pinned Kev in a separate Python 3.13 environment and adds the hash-pinned optimized training wheels without replacing locked dependencies.
 3. Keep `runtime-preflight.json` and run the separate preparation cell with `RUN_TRAINING_PREFLIGHT=False` (default). This fetches the pinned **Qwen3.5-4B-Base**, audits LoRA/head parameters on CPU, and checks pinned optimized bindings/CUDA/BF16 availability. Keep `optimized-training-preflight.json`; it records `bindings_verified`, zero optimizer steps and `cuda_loss_backward='not_run'`. The first real training step exercises loss/backward/fused AdamW and saves a recovery checkpoint. Reference-kernel fallback stops training.
 4. Optional: set `RUN_TRAINING_PREFLIGHT=True` for two extra suite-record training checks. This runs without a CUDA profiler, verifies gradients, and counts actual FLA/convolution/fused AdamW calls. Both this check and real training dump Python stacks after 60 seconds without progress. First-use compilation/autotuning may still occur in training when the check is skipped. The binding-only attempt has a two-minute cap; the optional check has a 20-minute cap. These are timeout limits, not duration estimates.
 
@@ -41,3 +41,9 @@ The old 0.8B run failed at step 2,073 with missing FLA/convolution kernels and n
 The local CPU tests do not establish CUDA compatibility or full-stage fit. **The optimized 4B CUDA preflight, full curriculum, CUDA continuation, reloads and live browser callback have not been run by the course author.** Complete them on the intended allocation, measure duration/compute-unit use and prepare compatible instructor checkpoints. Keep the 90-minute class and 30-minute fine-tuning block; report supplied results as instructor results.
 
 Sources: [Colab FAQ](https://research.google.com/colaboratory/faq.html), [RTX PRO 6000 Server Edition](https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/), [Kev-4B card](https://huggingface.co/jaredpalmer/kev-4b), [Qwen kernels](https://huggingface.co/docs/transformers/en/model_doc/qwen3_5).
+
+## Classic Pac-Man update
+
+Use the new bootstrap and CP0–CP5 cells. On an existing runtime rerun bootstrap, **Load completed Skills checkpoint — start the lab here**, then CP0. On a fresh runtime run setup, optimized preparation and Drive storage first. Keep the completed Skills baseline. CP3 writes `kev-4b-pacman-arcade`, with new `pacman-arcade-*` data and a 4,096-token state budget. The badge identifies the actual live adapter and hashes.
+
+Node.js executes the same pinned four-ghost engine for CPU evaluation. Setup uses an installed Node 18+ or a checksum-pinned official Node 22.17.0 binary. The native renderer, font, sounds and classic mechanisms are included. Human play uses 60 simulation frames per second; Kev pauses simulation time while deciding.

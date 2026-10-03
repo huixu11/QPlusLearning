@@ -1,47 +1,140 @@
-"""Kev controls Pac-Man; deterministic game code controls both ghosts."""
+"""Structured player decisions over the pinned upstream classic Pac-Man engine.
+
+The browser and CPU evaluation execute the same JavaScript, not Python physics.
+"""
+import base64
 from collections import deque
 import copy
+import hashlib
+import html
 import json
 from pathlib import Path
 import random
-import re
+import shutil
+import subprocess
+import tarfile
+import tempfile
 import time
+from urllib.request import urlopen
+import zipfile
 
 from api_client import call, distribution
 
-PACMAN_REVISION = "8446fe74690cd61909bda91acfadbccb0f02b422"
-POLICY = "Control Pac-Man to collect dots and avoid ghosts. First avoid being caught this turn, including the programmed ghost move on even-numbered turns. Among safe moves, minimize maze distance to a remaining dot without crossing a ghost's current tile. Then prefer greater distance from the nearest ghost. Break remaining ties in order: up, down, left, right."
-DIRECTIONS = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}
-OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
+ROOT = Path(__file__).resolve().parent
+PACMAN_REVISION = '7407174c1d6a38be8cd230577489e39e0873145b'
+POLICY = ('Control Pac-Man in classic arcade Pac-Man. Collect pellets and fruit, use power '
+          'pellets to eat frightened ghosts, and avoid dangerous ghosts. All four ghosts '
+          'follow the arcade engine. Prefer uncollected pellets reachable by safe maze '
+          'paths; avoid repeatedly revisiting the same tiles or reversing without progress. '
+          'Use the recent positions, ghost modes and legal moves. Select one supplied direction.')
+DIRECTIONS = {'up': (-1, 0), 'left': (0, -1), 'down': (1, 0), 'right': (0, 1)}
+DATA_PREFIX = 'pacman-arcade'
 
 
-def maze_from_html(html):
-    match = re.search(r"const MAZE = (\[.*?\]);", html, re.S)
-    if not match:
-        raise ValueError("Pinned game maze was not found")
-    return json.loads(re.sub(r",\s*]", "]", match.group(1)))
+def upstream_files():
+    """Verify the archive and every unmodified upstream file before execution."""
+    folder = ROOT / 'vendor/arcade-pacman'
+    meta = json.loads((folder / 'source.json').read_text())
+    content = (folder / 'source.zip').read_bytes()
+    expected = meta.get('archive_sha256') or meta['sha256']
+    if hashlib.sha256(content).hexdigest() != expected:
+        raise ValueError('Pac-Man source archive checksum mismatch')
+    with zipfile.ZipFile(folder / 'source.zip') as archive:
+        files = {name: archive.read(name) for name in archive.namelist() if not name.endswith('/')}
+    for name, expected in meta['files'].items():
+        if hashlib.sha256(files[name]).hexdigest() != expected:
+            raise ValueError(f'Pac-Man source checksum mismatch: {name}')
+    return files
+
+
+def engine_script():
+    source = upstream_files()['pacman.js'].decode()
+    end = source.rfind('})();')
+    if end < 0:
+        raise ValueError('Pinned arcade closure was not found')
+    return source[:end] + (ROOT / 'games/arcade-engine.js').read_text() + '\n' + source[end:]
+
+
+def ensure_node(workspace=ROOT):
+    """Use Node already installed, or one checksum-pinned official Linux binary."""
+    node = shutil.which('node')
+    if node and int(subprocess.check_output([node, '--version'], text=True).strip()[1:].split('.')[0]) >= 18:
+        return node
+    target = Path(workspace) / '.tools/node-v22.17.0/bin/node'
+    if target.is_file():
+        return str(target)
+    import platform
+    if platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'amd64'):
+        raise RuntimeError('Install Node.js 18 or newer to execute the shared arcade engine.')
+    url = 'https://nodejs.org/dist/v22.17.0/node-v22.17.0-linux-x64.tar.xz'
+    print('Installing pinned Node.js 22.17.0 for arcade replay (separate from Torch).', flush=True)
+    with urlopen(url, timeout=60) as response:
+        content = response.read()
+    if hashlib.sha256(content).hexdigest() != '325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12':
+        raise ValueError('Node download checksum mismatch')
+    import io
+    with tarfile.open(fileobj=io.BytesIO(content), mode='r:xz') as archive:
+        for name in ('bin/node', 'LICENSE'):
+            member = archive.getmember('node-v22.17.0-linux-x64/' + name)
+            destination = target.parent.parent / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(archive.extractfile(member).read())
+    target.chmod(0o755)
+    return str(target)
+
+
+class ArcadeEngine:
+    """A small JSON-lines bridge to the actual browser game's simulation."""
+    def __init__(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='kev-arcade-')
+        script = Path(self.directory.name) / 'pacman.js'
+        script.write_text(engine_script())
+        self.process = subprocess.Popen([ensure_node(), str(ROOT / 'games/arcade-worker.js'), str(script)],
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, text=True)
+
+    def request(self, command, **args):
+        self.process.stdin.write(json.dumps({'command': command, **args}) + '\n')
+        self.process.stdin.flush()
+        line = self.process.stdout.readline()
+        if not line:
+            raise RuntimeError('Arcade worker stopped: ' + self.process.stderr.read())
+        result = json.loads(line)
+        if 'error' in result:
+            raise RuntimeError(result['error'])
+        return result['result']
+
+    def reset(self, seed=7):
+        return self.request('reset', options={'seed': seed})
+
+    def step(self, direction):
+        return self.request('step', direction=direction)
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+        self.process.communicate(timeout=10)
+        self.directory.cleanup()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
 
 def position(actor):
-    return actor["row"], actor["column"]
+    return actor['row'], actor['column']
 
 
-def actor(pos, heading=None):
-    return {"row": pos[0], "column": pos[1], "heading": heading}
-
-
-def destination(pos, direction):
+def destination(maze, pos, direction):
     dr, dc = DIRECTIONS[direction]
-    return pos[0] + dr, pos[1] + dc
+    return pos[0] + dr, (pos[1] + dc) % len(maze[0])
 
 
 def legal(maze, pos):
-    options = []
-    for direction in DIRECTIONS:
-        r, c = destination(pos, direction)
-        if 0 <= r < len(maze) and 0 <= c < len(maze[0]) and maze[r][c] != "#":
-            options.append(direction)
-    return options
+    return [d for d in DIRECTIONS if 0 <= destination(maze, pos, d)[0] < len(maze)
+            and maze[destination(maze, pos, d)[0]][destination(maze, pos, d)[1]] != '#']
 
 
 def distances(maze, target, blocked=()):
@@ -49,193 +142,172 @@ def distances(maze, target, blocked=()):
     while queue:
         tile = queue.popleft()
         for direction in legal(maze, tile):
-            nxt = destination(tile, direction)
+            nxt = destination(maze, tile, direction)
             if nxt not in found and nxt not in blocked:
                 found[nxt] = found[tile] + 1
                 queue.append(nxt)
     return found
 
 
-def ghost_step(maze, ghosts, target):
-    """Community straight-ahead/Manhattan chase, with fixed ties (no RNG)."""
-    result = []
-    for ghost in ghosts:
-        pos, heading = position(ghost), ghost.get("heading")
-        options = legal(maze, pos)
-        if heading in options:
-            move = heading
-        else:
-            choices = [d for d in options if d != OPPOSITE.get(heading)] or options
-            def manhattan(d):
-                nxt = destination(pos, d)
-                return abs(nxt[0] - target[0]) + abs(nxt[1] - target[1])
-            move = min(choices, key=manhattan)
-        result.append(actor(destination(pos, move), move))
-    return result
-
-
-def initial_state(maze):
-    pac = next((r, c) for r, row in enumerate(maze) for c, ch in enumerate(row) if ch == "P")
-    ghosts = [actor((r, c)) for r, row in enumerate(maze) for c, ch in enumerate(row) if ch == "G"]
-    excluded = {pac, *(position(g) for g in ghosts)}
-    return {"maze": maze, "player": actor(pac), "ghosts": ghosts, "dots": [list(tile) for tile in sorted(distances(maze, pac)) if tile not in excluded], "turn": 0, "ghost_move_every": 2, "objective": "Collect every dot without being caught. Ghosts are controlled by deterministic game code."}
+def initial_state():
+    with ArcadeEngine() as engine:
+        return engine.reset()
 
 
 def body(state):
-    criteria = {d: f"Move {d} to row {destination(position(state['player']), d)[0]}, column {destination(position(state['player']), d)[1]}." for d in legal(state["maze"], position(state["player"]))}
-    return {"state": state, "model": "kev-latest", "questions": {"move": {"type": "choice", "instructions": POLICY, "criteria": criteria}}}
-
-
-def transition(state, direction):
-    """One player turn, then a ghost turn every second player turn."""
-    if direction not in legal(state["maze"], position(state["player"])):
-        raise ValueError("Player action crosses a wall")
-    nxt = copy.deepcopy(state)
-    pac = destination(position(state["player"]), direction)
-    nxt["player"] = actor(pac, direction)
-    nxt["turn"] += 1
-    nxt["dots"] = [dot for dot in nxt["dots"] if tuple(dot) != pac]
-    caught = pac in [position(g) for g in nxt["ghosts"]]
-    if not nxt["dots"]:
-        return nxt, "win"  # community game checks the final dot first
-    if not caught and nxt["turn"] % nxt["ghost_move_every"] == 0:
-        nxt["ghosts"] = ghost_step(state["maze"], nxt["ghosts"], pac)
-        caught = pac in [position(g) for g in nxt["ghosts"]]
-    return nxt, "caught" if caught else None
+    criteria = {d: f'Move {d} toward row {destination(state["maze"], position(state["player"]), d)[0]}, '
+                   f'column {destination(state["maze"], position(state["player"]), d)[1]}.'
+                for d in state['legal_moves']}
+    return {'state': state, 'model': 'kev-latest', 'questions': {'move': {
+        'type': 'choice', 'instructions': POLICY, 'criteria': criteria}}}
 
 
 def teacher(state):
-    """A stated heuristic for supervised imitation, not optimal Pac-Man play."""
-    current_ghosts = [position(g) for g in state["ghosts"]]
+    """A transparent maze heuristic, not human expertise or an optimal controller."""
+    maze, pac = state['maze'], position(state['player'])
+    danger = [position(g) for g in state['ghosts'] if g['mode'] in ('outside', 'leaving_home') and not g['frightened']]
+    pellets = [(r, c) for r, row in enumerate(maze) for c, ch in enumerate(row) if ch in '.o']
+    recent = [position(p) for p in state['recent_positions']]
     def rank(direction):
-        nxt, outcome = transition(state, direction)
-        if outcome == "win":
-            return (-1, 0, 0)
-        pac = position(nxt["player"])
-        routes = distances(state["maze"], pac, current_ghosts)
-        dot_distance = min((routes.get(tuple(dot), 999) for dot in state["dots"]), default=0)
-        separation = min((distances(state["maze"], pac).get(position(g), 999) for g in nxt["ghosts"]), default=999)
-        return (int(outcome == "caught"), dot_distance, -separation)
-    return min(legal(state["maze"], position(state["player"])), key=rank)
+        nxt = destination(maze, pac, direction)
+        routes = distances(maze, nxt, danger)
+        nearest_dot = min((routes.get(dot, 999) for dot in pellets), default=0)
+        separation = min((distances(maze, nxt).get(g, 999) for g in danger), default=999)
+        return (separation <= 1, separation <= 3, nearest_dot + 3 * recent.count(nxt), -min(separation, 8))
+    return min(state['legal_moves'], key=rank)
 
 
-def make_data(html, directory, counts=(64, 16, 16), seed=7):
-    """Synthetic positions on the community maze, not human recordings."""
-    maze = maze_from_html(html)
-    initial = initial_state(maze)
-    tiles = list(distances(maze, position(initial["player"])))
-    rng, used, rows = random.Random(seed), set(), []
-    while len(rows) < sum(counts):
-        pac, ghost1, ghost2 = rng.sample(tiles, 3)
-        group = (pac, ghost1, ghost2)
-        if group in used or len(legal(maze, pac)) < 2:
-            continue
-        used.add(group)
-        state = copy.deepcopy(initial)
-        state["player"] = actor(pac)
-        state["ghosts"] = [actor(ghost1), actor(ghost2)]
-        state["dots"] = [list(t) for t in sorted(tiles) if t not in group and rng.random() < 0.3]
-        if not state["dots"]:
-            continue
-        state["turn"] = rng.randrange(2)
-        request = body(state)
-        request["questions"]["move"].update(label=teacher(state), src="pacman_teacher")
-        request.pop("model")
-        request["_meta"] = {"id": f"board-{len(rows):03d}", "group_id": f"positions-{group}", "source": "pacman_synthetic", "variant": "clean", "label_source": "deterministic safety/shortest-dot heuristic"}
-        rows.append(request)
+def make_data(directory, counts=(64, 16, 16), seed=7):
+    """Snapshots from valid engine trajectories; whole episodes stay in one split."""
+    rng, fingerprints, manifest = random.Random(seed), set(), {'counts': {}, 'groups': {}, 'labels': {}}
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    offset, groups, labels = 0, {}, {}
-    for name, count in zip(["train", "development", "evaluation"], counts):
-        part = rows[offset:offset+count]
-        offset += count
-        (directory / f"pacman-{name}.jsonl").write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in part), encoding="utf-8")
-        groups[name] = [row["_meta"]["group_id"] for row in part]
-        labels[name] = {d: sum(row["questions"]["move"]["label"] == d for row in part) for d in DIRECTIONS}
-    manifest = {"counts": dict(zip(["train", "development", "evaluation"], counts)), "labels": labels, "seed": seed, "game_commit": PACMAN_REVISION, "label_policy": POLICY, "groups": groups, "interpretation": "Authored synthetic positions on one maze. Measures imitation of a teacher, not human-level play or generalization to new mazes."}
-    (directory / "pacman-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    episode = 0
+    with ArcadeEngine() as engine:
+        for split, count in zip(('train', 'development', 'evaluation'), counts):
+            rows, groups = [], []
+            while len(rows) < count:
+                episode += 1
+                episode_seed = seed + episode * 1009
+                state, replay = engine.reset(episode_seed), {'seed': episode_seed, 'actions': []}
+                group = f'arcade-episode-{episode:04d}'
+                for turn in range(384):
+                    chosen = teacher(state)
+                    fingerprint = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+                    if turn >= 12 and len(state['legal_moves']) >= 2 and fingerprint not in fingerprints and turn % 12 == 0:
+                        request = body(state)
+                        request.pop('model')
+                        request['questions']['move'].update(label=chosen, src='pacman_teacher')
+                        request['_meta'] = {'id': f'{split}-board-{len(rows):03d}', 'group_id': group,
+                                            'source': 'classic_pacman_engine', 'variant': 'clean',
+                                            'label_source': 'maze safety/pellet/loop heuristic', 'replay': copy.deepcopy(replay)}
+                        rows.append(request); fingerprints.add(fingerprint)
+                        if group not in groups:
+                            groups.append(group)
+                        if len(rows) == count:
+                            break
+                    # Exploration creates broader positions; the label always uses the stated heuristic.
+                    move = rng.choice(state['legal_moves']) if rng.random() < .2 else chosen
+                    result = engine.step(move)
+                    state, replay = result['state'], result['replay']
+                    if result['outcome']:
+                        break
+            (directory / f'{DATA_PREFIX}-{split}.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            manifest['counts'][split], manifest['groups'][split] = count, groups
+            manifest['labels'][split] = {d: sum(row['questions']['move']['label'] == d for row in rows) for d in DIRECTIONS}
+    manifest.update(seed=seed, game_commit=PACMAN_REVISION, label_policy=POLICY,
+                    interpretation='Valid seeded arcade trajectories on one maze; episode-disjoint imitation labels, not human demonstrations or a win-rate benchmark.')
+    (directory / f'{DATA_PREFIX}-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
 
 
 def inference_request(record):
-    return {"state": record["state"], "model": "kev-latest", "questions": {key: {field: q[field] for field in ["type", "instructions", "criteria"]} for key, q in record["questions"].items()}}
+    return body(record['state'])
 
 
 def evaluate(path, predict=None):
-    if predict is None:
-        predict = lambda request: call("/v1/systemone", request)[0]
-    results = []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        record = json.loads(line)
-        started = time.perf_counter()
-        response = predict(inference_request(record))
-        answer = response["answers"]["move"]
-        distribution(answer, record["questions"]["move"]["criteria"])
-        _, outcome = transition(record["state"], answer["choice"])
-        results.append({"id": record["_meta"]["id"], "gold": record["questions"]["move"]["label"], "prediction": answer["choice"], "probabilities": answer["probabilities"], "caught_next_turn": outcome == "caught", "http_ms": (time.perf_counter() - started) * 1000})
-    if not results:
-        raise ValueError("No labelled decisions to evaluate")
-    return {"n": len(results), "accuracy": sum(row["gold"] == row["prediction"] for row in results) / len(results), "caught_next_turn": sum(row["caught_next_turn"] for row in results), "rows": results}
+    predict = predict or (lambda request: call('/v1/systemone', request)[0])
+    rows = []
+    with ArcadeEngine() as engine:
+        for line in Path(path).read_text().splitlines():
+            record = json.loads(line)
+            replayed = engine.request('replay', replay=record['_meta']['replay'])
+            if replayed != record['state']:
+                raise ValueError('Evaluation snapshot differs from the pinned engine replay')
+            started = time.perf_counter()
+            response = predict(inference_request(record))
+            answer = response['answers']['move']
+            distribution(answer, record['questions']['move']['criteria'])
+            result = engine.step(answer['choice'])
+            rows.append({'id': record['_meta']['id'], 'gold': record['questions']['move']['label'],
+                         'prediction': answer['choice'], 'probabilities': answer['probabilities'],
+                         'caught_next_turn': result['outcome'] == 'life_lost',
+                         'http_ms': (time.perf_counter() - started) * 1000})
+    if not rows:
+        raise ValueError('No labelled decisions to evaluate')
+    return {'n': len(rows), 'accuracy': sum(r['gold'] == r['prediction'] for r in rows) / len(rows),
+            'caught_next_turn': sum(r['caught_next_turn'] for r in rows), 'rows': rows, 'engine_revision': PACMAN_REVISION}
 
 
-def rollout(maze, predict=None, max_turns=24):
-    if predict is None:
-        predict = lambda request: call("/v1/systemone", request)[0]
-    state = initial_state(maze)
-    initial_dots, frames, outcome = len(state["dots"]), [copy.deepcopy(state)], None
-    for _ in range(max_turns):
-        request = body(state)
-        answer = predict(request)["answers"]["move"]
-        distribution(answer, request["questions"]["move"]["criteria"])
-        state, outcome = transition(state, answer["choice"])
-        frames.append(copy.deepcopy(state))
-        if outcome:
-            break
-    return {"turns": state["turn"], "dots_collected": initial_dots - len(state["dots"]), "outcome": outcome or "turn_limit", "frames": frames}
+def rollout(predict=None, max_turns=128, seed=7):
+    predict = predict or (lambda request: call('/v1/systemone', request)[0])
+    with ArcadeEngine() as engine:
+        state = engine.reset(seed)
+        pellets, frames, outcome = state['pellets_remaining'], [copy.deepcopy(state)], None
+        for _ in range(max_turns):
+            request = body(state)
+            answer = predict(request)['answers']['move']
+            distribution(answer, request['questions']['move']['criteria'])
+            result = engine.step(answer['choice'])
+            state, outcome = result['state'], result['outcome']
+            frames.append(copy.deepcopy(state))
+            if outcome:
+                break
+    return {'turns': state['turn'], 'dots_collected': pellets - state['pellets_remaining'],
+            'score': state['score'], 'simulation_frames': state['simulation_frames'],
+            'repeated_tiles': sum(position(s['player']) in [position(p['player']) for p in frames[max(0, i-12):i]] for i, s in enumerate(frames)),
+            'outcome': outcome or 'turn_limit', 'frames': frames, 'engine_revision': PACMAN_REVISION, 'seed': seed}
 
 
 class NotebookBridge:
-    def __init__(self, trace_path):
+    def __init__(self, trace_path, model_info):
         self.trace_path = Path(trace_path)
         self.trace_path.parent.mkdir(parents=True, exist_ok=True)
+        self.model_info = model_info
+
+    def model(self):
+        return self.model_info()
 
     def decide(self, state):
+        if state.get('engine_revision') != PACMAN_REVISION or state.get('game') != 'classic-pacman':
+            raise ValueError('Load the current classic Pac-Man board before requesting a decision.')
+        identity = self.model()
         request = body(state)
-        response, elapsed = call("/v1/systemone", request)
-        distribution(response["answers"]["move"], request["questions"]["move"]["criteria"])
-        with self.trace_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"request": request, "response": response, "http_ms": elapsed}, ensure_ascii=False) + "\n")
+        response, elapsed = call('/v1/systemone', request)
+        distribution(response['answers']['move'], request['questions']['move']['criteria'])
+        if self.model() != identity:
+            raise RuntimeError('The checkpoint changed during this decision. Restart with the active adapter.')
+        response['active_checkpoint'] = identity
+        with self.trace_path.open('a') as handle:
+            handle.write(json.dumps({'request': request, 'response': response, 'http_ms': elapsed, 'active_checkpoint': identity}) + '\n')
         return response
 
 
-def notebook_game(source_html, controller_js, license_text):
-    """Reuse the pinned community maze and renderer, replace its controller."""
-    html = source_html
-    html = re.sub(r'<meta name="description"[^>]*>', '<meta name="description" content="Train Kev to control Pac-Man. Collect dots and avoid deterministic ghosts in this community browser game adaptation." />', html, count=1)
-    def replace(pattern, replacement):
-        nonlocal html
-        html, count = re.subn(pattern, lambda _: replacement, html, count=1, flags=re.S)
-        if count != 1:
-            raise ValueError("Game source no longer matches the pinned adapter")
-    replace(r'<a class="live".*?</a>', '<p class="live">Pac-Man lab — train the player</p>')
-    replace(r'<h1>.*?</h1>', '<h1>Kev plays Pac-Man</h1>')
-    replace(r'<p class="lede">.*?</p>', '<p class="lede">Collect dots and avoid the ghosts. Try a turn yourself, then let Kev control Pac-Man. Ghosts follow fixed game code.</p>')
-    replace(r'<details class="set".*?</details>', '<p><label>Player: <select id="lab-mode"><option value="human">Human — arrow keys / WASD</option><option value="kev">Kev — model decisions</option></select></label></p>')
-    replace(r'<footer>.*?</footer>', '<footer>Adapted from <a href="https://github.com/codaaiteam/jev-pacman">codaaiteam/jev-pacman</a> (MIT). The model controls Pac-Man; ghosts use deterministic game code.</footer>')
-    replace(r'const DEFAULT_BASE = .*?// ---------------------------------------------------------------------------\n// Game', '// ---------------------------------------------------------------------------\n// Game')
-    replace(r'const JEV_COST_PER_MTOK = .*?;', 'const STEP_MS=600;')
-    replace(r'let startAt,', 'let turn=0,gameGeneration=0,playerInfo=null,playerBusy=false;\nlet startAt,')
-    replace(r'function resetState\(\)\{', 'function resetState(){\n  turn=0;gameGeneration++;playerInfo=null;playerBusy=false;')
-    replace(r'const rows=\[0,1\].map.*?document.getElementById\("hunt-rows"\).innerHTML=rows;', 'document.getElementById("hunt-rows").textContent=playerInfo ? `Pac-Man → ${playerInfo.choice}; probability ${playerInfo.probability.toFixed(2)}` : "Waiting for a player decision";')
-    replace(r'async function askJev\(\).*?function startLoop\(\)', controller_js + '\nfunction startLoop()')
-    html = html.replace('function pause(){running=false;', 'function pause(){gameGeneration++;playerBusy=false;running=false;')
-    html = html.replace('Math.random()*0.3', '0')
-    html = html.replace("Jev's ghosts are hunting — one API call picks both directions", 'Pac-Man decisions — ghosts follow fixed code')
-    html = html.replace(' · $${cost.toFixed(5)}', '')
-    html = re.sub(r'<span>· <b>\$\$\{cost\.toFixed\(5\)\}</b></span>', '', html)
-    html = html.replace('Jev calls', 'model calls').replace('Jev decisions', 'model decisions')
-    html = html.replace("Run! Jev's ghosts are hunting you", 'Collect dots and avoid ghosts')
-    html = html.replace('Jev caught you', 'The ghosts caught Pac-Man').replace('You outran Jev.', 'Maze cleared.').replace("outrun Jev's ghosts", 'collect dots and avoid ghosts')
-    html = html.replace('<title>Jev Pac-Man — you drive, the AI ghosts hunt you</title>', '<title>Kev plays Pac-Man</title>')
-    html += '\n<!--\n' + license_text + '\n-->\n'
-    return html
+def notebook_game():
+    """Embed upstream renderer/font/audio in a Colab callback-controlled board."""
+    files = upstream_files()
+    source = engine_script()
+    # Resolve original assets inside srcdoc; no external game server or ROM needed.
+    for name, content in files.items():
+        if name.startswith('sounds/') and name.endswith('.mp3'):
+            source = source.replace(name, 'data:audio/mpeg;base64,' + base64.b64encode(content).decode())
+    end = source.rfind('})();')
+    source = source[:end] + (ROOT / 'games/arcade-browser.js').read_text() + '\n' + source[end:]
+    inner = files['index.html'].decode()
+    inner = inner.replace('font/ARCADE_R.TTF', 'data:font/ttf;base64,' + base64.b64encode(files['font/ARCADE_R.TTF']).decode())
+    inner = inner.replace('<script src="pacman.js"></script>', '<script>' + source.replace('</script', '<\\/script') + '</script>')
+    # Icons are irrelevant to an embedded board, while renderer/font/audio are upstream.
+    import re
+    inner = re.sub(r'<link[^>]+href="icon/[^>]+>', '', inner)
+    template = (ROOT / 'games/arcade-shell.html').read_text()
+    return template.replace('ARCADE_SRCDOC', html.escape(inner, quote=True))

@@ -30,7 +30,7 @@ class CheckpointBackupTests(unittest.TestCase):
             # Different serialization from the notebook; byte identity matters
             # for the recovery training-data fingerprint.
             original = json.dumps(row, separators=(',', ':')).encode() + b'\n'
-            reviewed = data / 'pacman-train-reviewed.jsonl'
+            reviewed = data / 'pacman-arcade-train-reviewed.jsonl'
             reviewed.write_bytes(original)
             scope = {'LAB_DIR': workspace, 'json': json, 'manifest': {'counts': {'train': 1}},
                      'print': lambda *args, **kwargs: None, 'evaluate': lambda *args: {'accuracy': 1}}

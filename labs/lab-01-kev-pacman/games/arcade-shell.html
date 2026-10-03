@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Kev plays classic Pac-Man</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#10111b;color:#f3f3fa;font:15px/1.5 system-ui,sans-serif}
+.lab{max-width:1000px;margin:auto;padding:24px}h1{margin:0;font-size:27px}p{margin:8px 0;color:#b8bdcf}
+.badge{margin:18px 0;padding:14px 18px;border:1px solid #454b69;background:#1b2032;border-radius:10px}
+.badge strong{color:#ffe45e;font-size:19px}.identity{overflow-wrap:anywhere;font-size:13px;color:#cbd3e6}
+.grid{display:flex;gap:24px;flex-wrap:wrap}.board{background:#000;border:1px solid #373c54;border-radius:12px;overflow:hidden}
+iframe{display:block;width:460px;height:590px;border:0}.panel{flex:1;min-width:240px}
+button,select{font:inherit;background:#252b43;color:#fff;border:1px solid #555d7a;border-radius:7px;padding:9px 13px;margin:4px 4px 4px 0;cursor:pointer}
+button.primary{background:#ffe45e;color:#15151b;border-color:#ffe45e}.status{min-height:56px;padding:12px 0;color:#d7ddf1}
+.error{color:#ff9292}.stats{font-variant-numeric:tabular-nums}.prob{display:flex;justify-content:space-between;border-bottom:1px solid #30354c;padding:7px 0}
+footer{font-size:12px;margin-top:20px;color:#9fa9c6}a{color:#97bdff}details{margin-top:8px}.small{font-size:13px}
+@media(max-width:560px){.lab{padding:12px}iframe{width:100%;height:530px}.board{width:100%}}
+</style></head><body><div class="lab">
+<h1>Kev plays classic Pac-Man</h1><p>Four ghosts. One player. Your decision model at the controls.</p>
+<div class="badge" aria-live="polite"><div class="small">ACTIVE LORA + POINTER HEAD</div><strong id="adapter">Verifying the serving checkpoint…</strong>
+<div id="identity" class="identity"></div><details><summary>Checkpoint details</summary><div id="details" class="identity"></div></details></div>
+<div class="grid"><div class="board"><iframe id="arcade" title="Classic Pac-Man arcade board" srcdoc="ARCADE_SRCDOC"></iframe></div>
+<div class="panel"><label for="mode">Pac-Man controller</label><br><select id="mode"><option value="human">Human — arrows / WASD</option><option value="kev">Kev — active adapter</option></select><br>
+<button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="reset">New game</button>
+<div id="status" class="status" aria-live="polite">Loading the original browser engine…</div>
+<div id="stats" class="stats"></div><h3>Last model decision</h3><div id="decision">Choose Kev and press Start.</div>
+<p class="small">Click the board to use the keyboard in Human mode. Sounds start after interaction; mute this tab if needed.</p>
+<p class="small">Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing each move. Ghost speeds and timers use the original engine’s simulation clock.</p>
+<p class="small">The Skills adapter has general decision training. CP3 teaches it Pac-Man. A legal move or high probability does not guarantee good play.</p></div></div>
+<footer>Classic mode from <a href="https://github.com/masonicGIT/pacman">masonicGIT/pacman</a>, pinned 7407174 (GPL-3.0). Original upstream maze, drawing, font, sounds and game mechanics. An arcade recreation with <a href="https://github.com/masonicGIT/pacman#accuracy">documented differences</a>. The model controls Pac-Man; Blinky, Pinky, Inky and Clyde use upstream code.</footer>
+</div><script>
+(function(){
+const frame=document.getElementById('arcade'),status=document.getElementById('status');
+function command(value){frame.contentWindow.postMessage({channel:'kev-classic-pacman',type:'command',data:value},'*');}
+function identity(info){
+ if(!info||!info.checkpoint)throw new Error('Missing verified adapter identity.');
+ document.getElementById('adapter').textContent=info.checkpoint_name;
+ document.getElementById('identity').textContent=(info.pacman_fine_tuned?'Pac-Man fine-tuned':'General '+info.stage+' — no Pac-Man fine-tuning')+' · LoRA rank '+info.lora_rank+' · '+(info.optimizer_steps??'unknown')+' optimizer steps';
+ document.getElementById('details').textContent=info.checkpoint+' | '+info.base+' | checkpoint SHA-256 '+(info.checkpoint_sha256||'unavailable')+' | adapter SHA-256 '+(info.adapter_sha256||'unavailable');
+}
+async function callback(name,arg){
+ if(!globalThis.google?.colab?.kernel?.invokeFunction)throw new Error('Open this game through CP0 in Colab to connect the trained model. Human mode still works.');
+ const result=await google.colab.kernel.invokeFunction(name,arg===null?[]:[arg],{});
+ const data=result.data?.['application/json'];if(!data)throw new Error('The notebook callback did not return JSON.');return data;
+}
+document.getElementById('mode').onchange=e=>command(e.target.value);
+for(const name of ['start','pause','reset'])document.getElementById(name).onclick=()=>command(name);
+window.addEventListener('message',async event=>{
+ if(event.source!==frame.contentWindow||event.data?.channel!=='kev-classic-pacman')return;
+ const m=event.data;
+ if(m.type==='callback'){
+  try{if(!['pacman.decide','pacman.model'].includes(m.callback))throw new Error('Unknown callback.');
+   const data=await callback(m.callback,m.argument);frame.contentWindow.postMessage({channel:m.channel,type:'callback-result',id:m.id,data},'*');
+  }catch(error){frame.contentWindow.postMessage({channel:m.channel,type:'callback-result',id:m.id,error:String(error.message||error)},'*');}
+ }
+ if(m.type==='ready'){status.textContent='Ready — Human mode. Press Start.';try{identity(await callback('pacman.model',null));}catch(error){document.getElementById('adapter').textContent='Checkpoint not connected';document.getElementById('identity').textContent=error.message;}}
+ if(m.type==='identity')identity(m.data);
+ if(m.type==='error'){status.textContent=m.data;status.className='status error';}
+ if(m.type==='status'){status.textContent=m.data.message;status.className='status';}
+ if(m.type==='board')document.getElementById('stats').textContent='Score '+m.data.score+' · Lives '+m.data.lives+' · Level '+m.data.level+' · Pellets '+m.data.pellets+' · Ghosts '+m.data.phase+' · Decisions '+m.data.turn+' · Visits here '+m.data.visits;
+ if(m.type==='decision'){
+  identity(m.data.active_checkpoint);const a=m.data.answers.move;
+  const panel=document.getElementById('decision');panel.replaceChildren();
+  const chosen=document.createElement('strong');chosen.textContent='Pac-Man → '+a.choice;panel.appendChild(chosen);
+  for(const [key,value] of Object.entries(a.probabilities)){const row=document.createElement('div');row.className='prob';row.textContent=key+' '+(100*value).toFixed(1)+'%';panel.appendChild(row);}
+  status.textContent='Playing — Kev';status.className='status';
+ }
+});
+})();
+</script></body></html>

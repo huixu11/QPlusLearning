@@ -96,6 +96,7 @@ class CloudRuntime:
         self.training_preflight = None
         self.initial_execution = validate_initial_execution(initial_execution)
         self.backup_root = None
+        self.active_checkpoint = None
 
     def _backup_checkpoint(self, output, snapshot):
         config_path = Path(output) / 'training_config.json'
@@ -112,7 +113,7 @@ class CloudRuntime:
             return result
         self.backup_root.mkdir(parents=True, exist_ok=True)
         result['backup_root'] = str(self.backup_root)
-        for name in ('kev-4b-initial', 'kev-4b-dates', 'kev-4b-documents', 'kev-4b-skills', 'kev-4b-pacman'):
+        for name in ('kev-4b-initial', 'kev-4b-dates', 'kev-4b-documents', 'kev-4b-skills', 'kev-4b-pacman-arcade'):
             output = Path(checkpoint_root).resolve() / name
             restored = restore_backup(output, self.backup_root, self.workspace)
             if restored:
@@ -149,6 +150,8 @@ class CloudRuntime:
 
     def setup(self):
         self.workspace.mkdir(parents=True, exist_ok=True)
+        from pacman_lab import ensure_node
+        ensure_node(self.workspace)
         subprocess.run(["nvidia-smi"], check=True)
         if not shutil.which("uv"):
             subprocess.run([sys.executable, "-m", "pip", "install", "uv"], check=True)
@@ -292,6 +295,10 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
 
     def start(self, run=MODEL_RUN):
         self.stop()
+        source = Path(run)
+        source = source if source.is_absolute() else self.repo / source
+        if (Path(run).is_absolute() or source.exists()) and not (source / 'head.pt').is_file():
+            raise RuntimeError(f'Checkpoint has no pointer head: {source}. Load a completed checkpoint first.')
         self.log = open(self.workspace / "server.log", "w", encoding="utf-8")
         self.process = subprocess.Popen([str(self.python), "-m", "kev.serve", "--run", str(run), "--host", "127.0.0.1", "--port", "8009"], cwd=self.repo, env=self.environment(), stdout=self.log, stderr=subprocess.STDOUT)
         os.environ["KEV_BASE_URL"] = "http://127.0.0.1:8009"
@@ -299,17 +306,57 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
         deadline = time.monotonic() + 900
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
+                self.stop()
                 raise RuntimeError("Kev stopped while loading. Inspect server.log in the notebook workspace.")
             try:
                 with urlopen("http://127.0.0.1:8009/v1/models", timeout=3) as response:
                     models = json.load(response)
+                card = self._serving_card(models)
+                if card['run'] != str(run):
+                    self.stop()
+                    raise RuntimeError(f"Kev loaded {card['run']} instead of requested checkpoint {run}.")
+                config = json.loads((source / 'training_config.json').read_text()) if (source / 'training_config.json').is_file() else {}
+                metrics = json.loads((source / 'training_metrics.json').read_text()) if (source / 'training_metrics.json').is_file() else {}
+                evidence = json.loads((source / 'run-evidence.json').read_text()) if (source / 'run-evidence.json').is_file() else {}
+                self.active_checkpoint = {
+                    'checkpoint': card['run'], 'checkpoint_name': source.name if source.is_dir() else str(run),
+                    'stage': evidence.get('stage', 'released' if not source.is_dir() else 'unrecorded'),
+                    'optimizer_steps': metrics.get('optimizer_steps'),
+                    'checkpoint_sha256': checkpoint_fingerprint(source) if source.is_dir() else None,
+                    'adapter_sha256': file_hash(source / 'adapter_model.safetensors') if (source / 'adapter_model.safetensors').is_file() else None,
+                    'base': card['base'], 'base_revision': config.get('args', {}).get('base_revision'),
+                    'lora_rank': card['lora'], 'dtype': card['dtype'], 'temperature': card['temperature'],
+                    'api_alias': card['name'], 'pacman_fine_tuned': evidence.get('stage') == 'pacman'}
+                (self.workspace / 'active-checkpoint.json').write_text(json.dumps(self.active_checkpoint, indent=2) + '\n')
                 (self.workspace / "models.json").write_text(json.dumps(models, indent=2) + "\n", encoding="utf-8")
                 print("Kev ready at notebook-local localhost:8009")
+                print('Active LoRA/head:', json.dumps(self.active_checkpoint, indent=2))
                 return models
             except (URLError, TimeoutError):
                 time.sleep(3)
+            except (KeyError, ValueError, RuntimeError):
+                self.stop()
+                raise
         self.stop()
         raise TimeoutError("Model startup exceeded 15 minutes. Inspect server.log and connection status.")
+
+    @staticmethod
+    def _serving_card(models):
+        cards = models.get('models', [])
+        if not cards:
+            raise RuntimeError('Kev returned no serving model card; checkpoint identity is unverified.')
+        return next((card for card in cards if card.get('name') == 'kev-latest'), cards[0])
+
+    def active_model_info(self):
+        """Check the live serving run, rather than labelling an API alias as an adapter."""
+        if self.active_checkpoint is None or self.process is None or self.process.poll() is not None:
+            raise RuntimeError('No verified active checkpoint. Load the Skills or Pac-Man checkpoint first.')
+        with urlopen('http://127.0.0.1:8009/v1/models', timeout=3) as response:
+            card = self._serving_card(json.load(response))
+        if (card['run'] != self.active_checkpoint['checkpoint'] or card['base'] != self.active_checkpoint['base']
+                or card['lora'] != self.active_checkpoint['lora_rank']):
+            raise RuntimeError('The serving checkpoint changed outside this runtime. Reload it before playing.')
+        return dict(self.active_checkpoint)
 
     def stop(self):
         if self.process is not None and self.process.poll() is None:
@@ -320,11 +367,12 @@ print('Prepared', len(rows), 'verified training records and base weights. LoRA/h
                 self.process.kill()
                 self.process.wait()
         self.process = None
+        self.active_checkpoint = None
         if self.log is not None:
             self.log.close()
             self.log = None
 
-    def training_command(self, training_data, output, init_from, steps=0, max_state=2048):
+    def training_command(self, training_data, output, init_from, steps=0, max_state=4096):
         # Read architecture from the checkpoint rather than guessing compatible flags.
         source = Path(init_from)
         source = source if source.is_absolute() else self.repo / source
