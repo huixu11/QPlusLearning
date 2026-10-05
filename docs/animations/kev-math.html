@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kev lab — probabilities and LoRA</title>
+<style>
+ :root{color-scheme:light;font:18px/1.5 Arial,sans-serif;color:#1a2433;background:#fff}
+ body{max-width:1100px;margin:40px auto;padding:0 24px}h1{font-size:32px}h2{font-size:27px;margin-top:48px}
+ a{color:#007b82}p{max-width:900px}.muted{color:#5e6e80;font-size:15px}
+ .formula{margin:24px 0;text-align:center}.formula img{max-width:100%;height:auto;width:900px}
+ .inputs{display:flex;flex-wrap:wrap;gap:32px;margin:24px 0}label{display:block}input[type=range]{width:210px;accent-color:#008b8b}
+ button{font:inherit;padding:6px 18px;margin:12px 8px 12px 0;border:1px solid #b0bdc6;background:white;cursor:pointer}
+ output{font-variant-numeric:tabular-nums}.bars{display:grid;grid-template-columns:100px 1fr 100px;gap:14px;align-items:center}
+ .bar-track{height:38px;background:#f0f5f5}.bar{height:100%;background:#008b8b;transition:width 80ms}
+ .matrices{display:flex;gap:35px;flex-wrap:wrap}.matrix table{border-collapse:collapse;font-variant-numeric:tabular-nums}
+ .matrix td{width:60px;height:48px;text-align:center;border:1px solid #fff}.matrix h3{font-size:20px}
+ section{margin-bottom:54px}footer{border-top:1px solid #ddd;margin-top:44px;padding-top:18px;font-size:15px}
+</style>
+<h1>Kev probabilities and LoRA</h1>
+<p>Pause, change a value and trace the calculation. All values here are illustrations; this page does not load a model or measure training results.</p>
+<p><a href="clm.html">CLM walkthrough</a> · <a href="https://docs.google.com/presentation/d/1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ/edit">15-slide lab</a> · <a href="https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman">Notebook and code</a></p>
+<section id="softmax">
+<h2>Probabilities over legal moves</h2>
+<p>Three supplied moves have pointer logits <i>z</i>. Softmax exponentiates each logit and divides by their sum. Changing one score changes every share.</p>
+<div class="formula"><img src="assets/pointer-softmax.png" alt="z j equals q transpose k j divided by square root of d p; p j equals exp z j divided by the sum of exp z k over legal actions"></div>
+<div class="inputs" id="logits"></div>
+<div class="bars" id="probabilities" aria-live="polite"></div>
+<p>Total: <output id="total"></output>. Top-ranked move: <output id="choice"></output>.</p>
+<button id="softmax-play">Animate scores</button><button id="softmax-reset">Reset [2, 1, 0]</button>
+<p class="muted">q: projected decision vector; k_j: projected option vector; d_p = 256 in Kev; A(s): legal actions. Raw temperature is 1. These shares are not a calibrated chance of surviving.</p>
+</section>
+<section id="lora">
+<h2>A fixed matrix with a learned update</h2>
+<p>Move the slider to grow a low-rank update while the base stays fixed. The tiny example uses rank 2 and α/r = 1. The published small-model Kev recipe uses rank 16 and α = 32.</p>
+<div class="formula"><img src="assets/lora.png" alt="W effective equals W zero plus alpha divided by r times B A"></div>
+<label for="update">Illustrative update fraction: <output id="fraction">0.00</output></label><input id="update" type="range" min="0" max="1" step="0.01" value="0">
+<button id="lora-play">Play</button><button id="lora-reset">Reset</button>
+<div class="matrices" id="matrices"></div>
+<p class="muted">W0 is 4 × 4; A is 2 × 4; B is 4 × 2. Scaling B changes the rank-at-most-2 product BA. This interpolation illustrates the matrix identity, not an optimizer trajectory. Actual training updates LoRA A/B and the pointer head while base matrices stay fixed.</p>
+</section>
+<footer>Pinned model implementation: <a href="https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py">Kev model.py</a>. No API requests, accounts or GPU are needed for these controls.</footer>
+<script src="kev-math.js"></script>
+</html>

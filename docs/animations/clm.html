@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>From message to decision · CLM animation</title><style>:root{color-scheme:light;--ink:#122333;--muted:#596c7d;--teal:#197487;--edge:#dce4e9;--paper:#fff;--bg:#edf2f5;--gold:#9b620d;--blue:#3b65ad}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif}button,input,select{font:inherit}button,select{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #dd9b28;outline-offset:4px}button{border:1px solid var(--edge);border-radius:8px;background:var(--paper);color:var(--ink);padding:10px 15px;font-weight:600}button:hover{border-color:var(--teal)}button:disabled{opacity:.4;cursor:default}button[aria-pressed=true],button[aria-current=step],.primary{background:var(--teal);color:#fff;border-color:var(--teal)}main{max-width:1320px;margin:auto;padding:24px 24px 18px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.brand{font-size:14px;font-weight:700;letter-spacing:.04em}.brand span{font-weight:400;color:var(--muted);margin-left:12px}.mode{display:flex;gap:6px}.mode button{font-size:14px}.stage{position:relative;background:#fff;border:1px solid var(--edge);border-radius:14px;overflow:hidden;box-shadow:0 12px 40px #203d5410}.stage svg{display:block;width:100%;height:auto}.stage:fullscreen{background:#fff;display:grid;place-items:center;border:0;border-radius:0}.stage:fullscreen svg{width:min(100vw,177.777vh);height:auto}.chapters{display:flex;gap:6px;flex-wrap:wrap;padding:15px 0 12px}.chapters button{font-size:12px;padding:8px 10px;flex:1;white-space:nowrap;font-weight:500}.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--edge);padding-top:15px}.transport .primary{min-width:116px}.transport label{font-size:13px;color:var(--muted)}.transport select{border:1px solid var(--edge);border-radius:7px;padding:8px;background:#fff;color:var(--ink)}.time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);white-space:nowrap}.scrub{display:flex;align-items:center;gap:12px;flex:1;min-width:180px}.scrub input{width:100%;accent-color:var(--teal)}.mobile-summary{display:none}.notes{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-top:15px;color:var(--muted);font-size:12px;line-height:1.6}.notes p{margin:0}.notes details{max-width:750px}.notes summary{cursor:pointer}.notes a{color:var(--teal)}.notes ul{padding-left:18px}.sr-only{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden;white-space:nowrap}#status{min-height:20px;font-size:12px;color:var(--muted)}
+@media(max-width:760px){main{padding:12px}.top{align-items:flex-start}.brand{font-size:12px}.brand span{display:block;margin:5px 0 0}.mode button{font-size:12px;padding:8px}.chapters button{flex:0 0 auto}.transport{gap:8px}.transport button{font-size:12px;padding:9px 11px}.scrub{order:2;flex-basis:100%}.notes{display:block}.notes details{margin-top:8px}.mobile-summary{display:block;margin:12px 0;font-size:14px;line-height:1.6}.stage{border-radius:8px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style></head>
+<body><main>
+<header class="top"><div class="brand">CONTRASTIVE LANGUAGE MODELS<span>An animated walkthrough</span></div><div class="mode" aria-label="Walkthrough mode"><button id="inference" aria-pressed="true">1. Make a decision</button><button id="training" aria-pressed="false">2. How it learns</button></div></header>
+<div class="stage" id="stage"></div>
+<p class="mobile-summary" id="mobile-summary"></p>
+<nav class="chapters" id="chapters" aria-label="Animation chapters"></nav>
+<div class="transport" aria-label="Playback controls"><button class="primary" id="play">▶ Play</button><button id="previous" aria-label="Previous chapter">← Previous</button><button id="next" aria-label="Next chapter">Next →</button><div class="scrub"><label for="timeline" class="sr-only">Animation position in seconds</label><input id="timeline" type="range" min="0" max="100" value="0" step="0.05"><span class="time" id="time">0:00 / 0:00</span></div><label for="speed">Speed</label><select id="speed"><option value="0.65">Slower</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select><button id="fullscreen">Full screen</button></div>
+<div id="status" role="status" aria-live="polite"></div>
+<footer class="notes"><p>Illustrative numbers · Qwen3-8B + CLM heads<br>Space: play / pause · ← →: change chapter</p><details><summary>What is real, what is simplified, and sources</summary><p>This follows the open CLM path in your deck. Qwen3-8B has 36 transformer blocks and 4,096-wide token representations. The same frozen backbone encodes the state and each action separately. Two distinct MLP heads are trained for matching. Head widths and depth are schematic; token IDs, attention weights, activations, and 2D vectors are teaching examples. This preview runs arithmetic, not an LLM. Its probabilities are relative to the three supplied options.</p><ul><li><a href="https://huggingface.co/Contrastive-LM/CLM-v0.1-8B" target="_blank" rel="noreferrer">CLM model card</a></li><li><a href="https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py" target="_blank" rel="noreferrer">Projection head code</a> · <a href="https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/engine.py" target="_blank" rel="noreferrer">Scoring code</a></li><li><a href="https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json" target="_blank" rel="noreferrer">Qwen3-8B dimensions</a> · <a href="https://github.com/Contrastive-LM/CLM#training-algorithm" target="_blank" rel="noreferrer">Training objective</a></li></ul></details></footer>
+</main><script>/* Deterministic, dependency-free SVG animation. All displayed numbers are toy data. */
+(function(global){
+'use strict';
+const C={bg:'#ffffff',ink:'#122333',muted:'#596c7d',edge:'#dce4e9',soft:'#f4f7f9',teal:'#197487',tealSoft:'#e8f5f5',blue:'#3b65ad',blueSoft:'#edf2fb',gold:'#9b620d',goldSoft:'#fff4df',red:'#b55550'};
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const ease=v=>{v=clamp(v);return v*v*(3-2*v);};
+const mix=(a,b,t)=>a+(b-a)*t;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+const fmt=(n,d=2)=>Number(n).toFixed(d);
+const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+const norm=a=>{const n=Math.hypot(...a);return a.map(v=>v/n);};
+const softmax=a=>{const m=Math.max(...a),e=a.map(v=>Math.exp(v-m)),sum=e.reduce((a,b)=>a+b,0);return e.map(v=>v/sum);};
+const unitState=[1,0],actions=[[1,0],[.5,Math.sqrt(3)/2],[0,1]],temperature=.5;
+const scores=actions.map(a=>dot(unitState,a)/temperature),probs=softmax(scores);
+const toyLayer={input:[2,1],weights:[[1,1],[-1,1]],bias:[0,0]};
+toyLayer.raw=toyLayer.weights.map((w,i)=>dot(w,toyLayer.input)+toyLayer.bias[i]);
+toyLayer.output=toyLayer.raw.map(v=>Math.max(0,v));
+const inference=[
+ {short:'Input',title:'Start with a message and a question.',duration:9,active:0,formula:'x = message + question       aⱼ = one candidate description',note:['We supply the situation and the possible answers.','The model’s job is to compare the candidates and choose one.']},
+ {short:'Tokens',title:'Text becomes IDs. IDs become vectors.',duration:11,active:1,formula:'token ID → embedding lookup → a list of numbers',note:['Each token ID selects a row from a learned embedding table.','Word pieces, IDs, and tiny vectors below are illustrative; the question is encoded too.']},
+ {short:'LLM layers',title:'The frozen LLM builds context.',duration:13,active:2,formula:'H⁰ = token embeddings       Hˡ⁺¹ = TransformerBlockˡ(Hˡ)',note:['Both text streams use the same pretrained Qwen3-8B weights in separate passes.','Frozen means the weights stay fixed during CLM training; the LLM still computes.']},
+ {short:'Inside a block',title:'Attention mixes. The feed-forward net transforms.',duration:15,active:2,formula:'Attention(Q, K, V) = softmax(QKᵀ / √d + M)V',note:['Queries and keys determine how much earlier token information to mix.','M blocks future tokens; these attention weights are invented for the explanation.']},
+ {short:'Pooling',title:'Keep the final token’s contextual vector.',duration:10,active:2,formula:'h = H[final non-padding token]       h has 4,096 numbers',note:['Last-token pooling selects one row after the final backbone normalization.','That row can contain information from the earlier tokens in this causal model.']},
+ {short:'Trained heads',title:'Two small networks learn the matching space.',duration:14,active:3,formula:'rₛ = gₛ(hₛ)       rₐ = gₐ(hₐ)       one layer: h′ = activation(Wh + b)',note:['The state head and action head have different weights; every candidate uses the action head.','The dots show a simplified MLP. Hidden widths and depth depend on the checkpoint.']},
+ {short:'One layer',title:'A toy layer shows what the weights do.',duration:13,active:3,formula:'h′ = ReLU(W h + b)       ReLU keeps positive values and replaces negatives with 0',note:['Each row of W mixes the input numbers; b adds an offset. Then a nonlinear rule is applied.','Billing branch, 2D teaching example. ReLU is illustrative; the real activation is checkpoint-dependent.']},
+ {short:'Normalize',title:'Turn each projected vector into a unit vector.',duration:10,active:3,formula:'u = rₛ / ‖rₛ‖       vⱼ = rₐⱼ / ‖rₐⱼ‖',note:['Normalization divides a vector by its length while preserving direction.','The following two-dimensional example makes the matching arithmetic visible.']},
+ {short:'Scores',title:'Compare the state with every candidate.',duration:12,active:4,formula:'zⱼ = (u · vⱼ) / τ       teaching temperature τ = 0.5',note:['Multiply matching coordinates and add, then divide by the temperature.','A larger score means a closer match in this trained representation space.']},
+ {short:'Softmax',title:'Turn scores into a distribution.',duration:12,active:4,formula:'pⱼ = exp(zⱼ) / Σₖ exp(zₖ)',note:['Exponentiate each score, then divide by the total. All three probabilities sum to 1.','These are relative to the supplied choices; they are not a measured accuracy claim.']},
+ {short:'Output',title:'Return the selected option and its distribution.',duration:10,active:5,formula:'choice = argmaxⱼ pⱼ       →       billing',note:['The application receives a label and can route the message to the billing team.','This path scores supplied options; it does not generate a reply or authorize a refund.']}
+];
+const training=[
+ {short:'Matched pairs',title:'Training starts with checked state–action pairs.',duration:11,active:0,formula:'(s₁, a₁), (s₂, a₂), (s₃, a₃)       →       a batch of B = 3',note:['The matching pairs are the positives; other pairings provide contrasts in this toy batch.','A real batch needs care: another example’s action can also be a valid answer.']},
+ {short:'Contrastive loss',title:'Reward the matches in both directions.',duration:16,active:4,formula:'L = ½(Lrow + Lcolumn)       Lrow = −(1/B) Σᵢ log p(aᵢ | sᵢ)',note:['Rows ask “which action fits this state?”; columns ask “which state fits this action?”','Bidirectional loss trains both retrieval directions; it does not unmask Qwen’s attention.']},
+ {short:'Weight update',title:'The gradient changes the heads, while Qwen stays frozen.',duration:14,active:3,formula:'θnew = θold − η ∇θL       one weight: 1.00 − 0.10 × 0.40 = 0.96',note:['Backpropagation computes how head weights affect the loss; an optimizer updates them.','The implementation also learns a logit scale. This one-weight update is a separate toy calculation.']},
+ {short:'Use learned weights',title:'After training, use the learned weights for a new message.',duration:10,active:5,formula:'training: change parameters       inference: use fixed parameters',note:['Both the backbone and the learned heads are fixed while serving this request.','Training repeats over many examples; evaluate the resulting model on held-out data.']}
+];
+const subs={'ₛ':'s','ₐ':'a','ⱼ':'j','ₖ':'k','ᵢ':'i','₀':'0','₁':'1','₂':'2','₃':'3'},sups={'⁰':'0','ˡ':'l','⁺':'+','¹':'1','ᵀ':'T'};
+function mathText(value){return String(value).split(/([ₛₐⱼₖᵢ₀₁₂₃]+|[⁰ˡ⁺¹ᵀ]+)/).map(s=>subs[s[0]]?`<tspan baseline-shift="sub" font-size="70%">${[...s].map(c=>subs[c]).join('')}</tspan>`:sups[s[0]]?`<tspan baseline-shift="super" font-size="70%">${[...s].map(c=>sups[c]).join('')}</tspan>`:esc(s)).join('');}
+const text=(x,y,s,size=22,fill=C.ink,weight=400,anchor='start')=>`<text x="${x}" y="${y}" font-size="${size}" fill="${fill}" font-weight="${weight}" text-anchor="${anchor}" xml:space="preserve">${mathText(s)}</text>`;
+const lines=(x,y,arr,size=22,fill=C.ink,gap=32,weight=400)=>arr.map((s,i)=>text(x,y+i*gap,s,size,fill,weight)).join('');
+const rect=(x,y,w,h,fill=C.soft,stroke='none',rx=12)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}"/>`;
+const line=(x1,y1,x2,y2,color=C.edge,width=2,extra='')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${width}" ${extra}/>`;
+const circle=(x,y,r,fill,stroke='none',width=1)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+function arrow(x1,y1,x2,y2,color=C.teal,width=2){const angle=Math.atan2(y2-y1,x2-x1),len=8;return line(x1,y1,x2,y2,color,width)+`<path d="M ${x2-len*Math.cos(angle-.5)} ${y2-len*Math.sin(angle-.5)} L ${x2} ${y2} L ${x2-len*Math.cos(angle+.5)} ${y2-len*Math.sin(angle+.5)}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"/>`;}
+function pulse(x1,y1,x2,y2,p,color=C.teal){return circle(mix(x1,x2,ease(p)),mix(y1,y2,ease(p)),7,color)+circle(mix(x1,x2,ease(p)),mix(y1,y2,ease(p)),13,'none',color,1);}
+function badge(x,y,w,label,color=C.teal,fill=C.tealSoft){return rect(x,y,w,28,fill,'none',14)+text(x+w/2,y+19,label,13,color,700,'middle');}
+function formula(s){return rect(44,558,1192,68,C.soft)+text(68,600,s,26,C.teal,500);}
+function pipeline(active){const labels=['Text inputs','Token vectors','Frozen LLM','Trained heads','Compare','Decision'],xs=[44,219,394,624,854,1059],ws=[148,148,203,203,178,177];return labels.map((s,i)=>{const color=i===2?C.blue:i===3?C.gold:C.teal;return rect(xs[i],132,ws[i],40,i===active?color:C.soft,'none',8)+text(xs[i]+ws[i]/2,158,s,17,i===active?'#fff':C.muted,600,'middle')+(i<5?arrow(xs[i]+ws[i]+6,152,xs[i+1]-6,152,C.edge):'');}).join('');}
+function frame(scene,index,count,content,mode){return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="frame-title frame-desc" font-family="Arial, Helvetica, sans-serif"><title id="frame-title">${esc(scene.title)}</title><desc id="frame-desc">${esc(scene.note.join(' '))}</desc>${rect(0,0,1280,720,C.bg,'none',0)}${text(44,40,mode==='training'?'HOW THE MODEL LEARNS':'ONE REQUEST, END TO END',14,C.teal,700)}${text(44,91,scene.title,32,C.ink,700)}${text(1236,40,`${String(index+1).padStart(2,'0')} / ${String(count).padStart(2,'0')}`,15,C.muted,500,'end')}${pipeline(scene.active)}${content}${formula(scene.formula)}${text(44,665,scene.note[0],22,C.ink)}${text(44,698,scene.note[1],18,C.muted)}</svg>`;}
+
+function inputScene(t){
+ let s=badge(54,203,113,'STATE + TASK')+rect(54,247,681,257,C.soft);
+ s+=lines(82,291,['“I was charged twice.','Please help.”'],36,C.ink,47,600);
+ s+=text(82,417,'Question',15,C.muted,600)+text(82,452,'Which team should handle this?',26);
+ s+=badge(779,203,183,'CANDIDATE ACTIONS');
+ const names=['Billing','Technical support','Human review'],desc=['Charges, invoices, refunds','Bugs, outages, login issues','Ambiguous or exceptional cases'];
+ names.forEach((n,i)=>{const y=247+87*i,selected=Math.floor(t*3)===i;s+=rect(779,y,446,74,selected?C.tealSoft:C.soft)+text(803,y+29,n,23,C.ink,600)+text(803,y+56,desc[i],17,C.muted);});
+ return s;
+}
+function tokensScene(t){
+ const tokens=['I','was','charged','twice','.','Please','help','.'],ids=[17,38,204,93,4,62,81,4];
+ let s=text(55,216,'Message excerpt · the task and each candidate are tokenized too',18,C.muted);
+ const phase=ease(t*2.3),p2=ease((t-.3)*2.3);
+ tokens.forEach((word,i)=>{const x=55+i*146,y=mix(256,291,phase);s+=rect(x,y,131,49,C.tealSoft)+text(x+65.5,y+32,word,23,C.ink,500,'middle');s+=arrow(x+65.5,y+56,x+65.5,371,C.edge);s+=rect(x,382,131,44,C.soft)+text(x+65.5,412,ids[i],22,C.muted,500,'middle');s+=arrow(x+65.5,435,x+65.5,454,C.edge);for(let j=0;j<4;j++){const v=Math.sin(ids[i]+j*7),height=mix(3,14+Math.abs(v)*21,p2);s+=rect(x+14+j*26,496-height,17,height,v>0?C.teal:C.blue,'none',3);}});
+ return s+text(55,253,'Illustrative token pieces',16,C.muted)+text(55,532,'ID = lookup key',17,C.muted)+text(653,532,'Real embedding: 4,096 numbers per token',17,C.blue);
+}
+function backboneScene(t){
+ let s=badge(54,205,195,'QWEN3-8B · FROZEN',C.blue,C.blueSoft);
+ s+=text(54,272,'State + question',23,C.ink,600)+text(54,314,'Candidate 1, 2, 3',23,C.ink,600);
+ s+=text(54,353,'Separate text passes',17,C.muted);
+ s+=arrow(266,272,336,272,C.blue)+arrow(266,314,336,314,C.blue);
+ s+=rect(350,240,822,210,C.blueSoft,C.edge);
+ const group=Math.min(5,Math.floor(t*6));
+ for(let i=0;i<6;i++){const x=377+i*128;for(let j=2;j>=0;j--)s+=rect(x+j*5,285-j*5,94,105,'#fff',i===group?C.blue:C.edge,7);s+=text(x+48,328,i===0?'1–6':`${i*6+1}–${i*6+6}`,23,C.ink,600,'middle')+text(x+48,363,'blocks',15,C.muted,400,'middle');if(i<5)s+=arrow(x+103,335,x+124,335,C.blue);}
+ s+=text(761,422,'36 transformer blocks · width 4,096',22,C.blue,500,'middle');
+ s+=pulse(361,254,1151,254,t,C.blue);
+ s+=rect(351,471,821,56,C.soft)+text(761,506,'These pretrained layers are reused. Only the heads learn this matching task.',20,C.ink,400,'middle');
+ return s;
+}
+function attentionScene(t){
+ let s=badge(54,198,154,'ONE OF 36 BLOCKS',C.blue,C.blueSoft);
+ const xs=[56,257,480,685,884,1085],names=[['Token','states'],['RMS','norm'],['Causal','attention'],['Add','residual'],['RMS norm','+ FFN'],['Add','residual']];
+ names.forEach((a,i)=>{const active=Math.min(5,Math.floor(t*6))===i;s+=rect(xs[i],252,151,85,active?C.blueSoft:C.soft,active?C.blue:C.edge,9)+lines(xs[i]+75.5,287,a,21,C.ink,27).replaceAll('text-anchor="start"','text-anchor="middle"');if(i<5)s+=arrow(xs[i]+160,294,xs[i+1]-10,294,C.blue);});
+ s+=`<path d="M 132 249 V 224 H 760 V 249 M 760 340 V 367 H 1160 V 340" fill="none" stroke="${C.blue}" stroke-width="2"/>`;
+ s+=text(390,217,'skip connection',15,C.blue)+text(965,389,'skip connection',15,C.blue);
+ s+=text(64,418,'Attention at “twice”',19,C.ink,600);
+ const words=['I','was','charged','twice'],weights=[.06,.09,.62,.23];
+ words.forEach((w,i)=>{const x=65+i*142,fill=i===2?C.blue:C.edge;s+=text(x,452,w,19)+rect(x,467,119,10,C.soft,'none',5)+rect(x,467,119*weights[i]*ease(t*2+.1),10,fill,'none',5)+text(x,506,fmt(weights[i],2),17,C.muted);});
+ s+=rect(707,416,529,110,C.goldSoft)+text(730,447,'Feed-forward network (FFN)',20,C.ink,600)+text(730,480,'Linear projections → SiLU gate → projection',19,C.ink)+text(730,509,'Transforms each token; residuals add earlier states.',16,C.muted);
+ return s;
+}
+function poolingScene(t){
+ let s=text(65,219,'Contextual token representations after the backbone',21,C.ink,600);
+ const words=['I','was','charged','…','?'],ys=[251,303,355,407,459];
+ words.forEach((w,i)=>{const chosen=i===4;s+=text(72,ys[i]+26,w,22,chosen?C.blue:C.muted);for(let j=0;j<12;j++){const val=Math.sin(i*6+j);s+=rect(214+j*31,ys[i],23,36,chosen?(val>0?C.blue:C.teal):C.edge,'none',4);}if(chosen)s+=rect(202,ys[i]-7,398,50,'none',C.blue,7);});
+ s+=text(217,533,'Many columns omitted · full width = 4,096',16,C.muted);
+ s+=arrow(626,477,763,362,C.blue)+pulse(626,477,763,362,t,C.blue);
+ s+=rect(790,263,431,216,C.blueSoft)+text(816,305,'Last non-padding token',24,C.ink,600)+text(816,345,'h = [0.2, −0.7, 0.4, …]',26,C.blue)+text(816,392,'One vector per encoded text',21)+text(816,431,'State → hₛ       Candidate j → hₐⱼ',21);
+ return s;
+}
+function net(x,y,p,color){
+ let s='';const counts=[4,5,3],xx=[x,x+125,x+250],gap=21;
+ for(let l=0;l<2;l++)for(let a=0;a<counts[l];a++)for(let b=0;b<counts[l+1];b++){const y1=y+(a-(counts[l]-1)/2)*gap,y2=y+(b-(counts[l+1]-1)/2)*gap;const on=(p*2>=l&&p*2<l+1);s+=line(xx[l],y1,xx[l+1],y2,on?color:C.edge,on?1.6:1);}
+ for(let l=0;l<3;l++)for(let i=0;i<counts[l];i++)s+=circle(xx[l],y+(i-(counts[l]-1)/2)*gap,7,p*2>=l?color:'#fff',color,1.5);
+ return s;
+}
+function headsScene(t){
+ let s=badge(53,198,191,'FROZEN FEATURES',C.blue,C.blueSoft)+badge(474,198,221,'TRAINED MLP HEADS',C.gold,C.goldSoft)+badge(1012,198,215,'PROJECTED VECTORS');
+ const ys=[312,462];
+ ys.forEach((y,i)=>{s+=rect(54,y-49,304,98,C.blueSoft)+text(77,y-11,i?'Candidate feature hₐⱼ':'State feature hₛ',22,C.ink,600)+text(77,y+24,'4,096 numbers',21,C.blue);s+=arrow(373,y,461,y,C.gold)+pulse(373,y,461,y,t,C.gold);s+=net(491,y,clamp(t*1.5),C.gold);s+=text(627,y-67,i?'Action head gₐ · reused for all j':'State head gₛ',19,C.gold,600,'middle');['input','hidden','output'].forEach((a,j)=>s+=text(491+j*125,y+64,a,15,C.muted,400,'middle'));s+=arrow(762,y,984,y,C.teal)+pulse(762,y,984,y,clamp((t-.5)*2),C.teal);s+=rect(1006,y-36,220,72,C.tealSoft)+text(1116,y+9,i?'rₐⱼ = gₐ(hₐⱼ)':'rₛ = gₛ(hₛ)',23,C.teal,500,'middle');});
+ return s;
+}
+function layerScene(t){
+ let s=badge(54,207,283,'BILLING BRANCH · TOY NUMBERS');
+ const boxes=[{x:54,w:174,title:'Input h',fill:C.blueSoft},{x:284,w:248,title:'Weights W',fill:C.goldSoft},{x:588,w:165,title:'Bias b',fill:C.goldSoft},{x:809,w:165,title:'W h + b',fill:C.soft},{x:1030,w:196,title:'ReLU output',fill:C.tealSoft}];
+ boxes.forEach((b,i)=>{s+=rect(b.x,283,b.w,135,b.fill)+text(b.x+b.w/2,270,b.title,20,C.ink,600,'middle');if(i<4)s+=arrow(b.x+b.w+10,350,boxes[i+1].x-12,350,C.edge)+pulse(b.x+b.w+10,350,boxes[i+1].x-12,350,clamp(t*4-i),C.teal);});
+ s+=text(141,361,'[2, 1]',30,C.blue,600,'middle');
+ s+=text(355,331,'1',29,C.gold,600,'middle')+text(461,331,'1',29,C.gold,600,'middle')+text(355,384,'−1',29,C.gold,600,'middle')+text(461,384,'1',29,C.gold,600,'middle');
+ s+=text(670,361,'[0, 0]',28,C.gold,600,'middle')+text(891,361,'[3, −1]',27,C.ink,600,'middle')+text(1128,361,'[3, 0]',30,C.teal,600,'middle');
+ s+=text(74,475,'Row 1:  (1 × 2) + (1 × 1) + 0 = 3',25,C.ink)+text(74,520,'Row 2:  (−1 × 2) + (1 × 1) + 0 = −1',25,C.ink);
+ s+=text(812,475,'3 stays 3',26,C.teal,600)+text(812,520,'−1 becomes 0',26,C.teal,600);return s;
+}
+function normalizeScene(t){
+ let s=text(62,225,'Toy head outputs',21,C.ink,600)+text(394,225,'Divide by length',21,C.ink,600)+text(776,225,'Unit vectors used next',21,C.ink,600);
+ const rows=[['State','[2, 0]','2','u = [1, 0]'],['Billing','[3, 0]','3','v₁ = [1, 0]'],['Technical','[1, √3]','2','v₂ = [0.5, √3/2]'],['Review','[0, 4]','4','v₃ = [0, 1]']];
+ rows.forEach((r,i)=>{const y=267+i*66,active=clamp(t*4-i);s+=rect(53,y-26,1177,58,i===0?C.blueSoft:C.soft);s+=text(70,y+9,r[0],21)+text(244,y+9,r[1],25,C.muted);s+=arrow(386,y,639,y,C.edge)+pulse(386,y,639,y,active,C.teal);s+=text(497,y-8,'÷ '+r[2],19,C.teal,600,'middle')+text(776,y+9,r[3],26,C.teal,600);});return s;
+}
+function scoresScene(t){
+ let s=badge(54,204,246,'UNIT STATE VECTOR u = [1, 0]')+badge(974,204,250,'TOY NUMBERS · τ = 0.5');
+ const xs=[76,347,693,1032],heads=['Candidate','Coordinate products','Dot product','Score z'];heads.forEach((a,i)=>s+=text(xs[i],272,a,19,C.muted,600));
+ const rows=[['Billing','1 × 1 + 0 × 0','1.0','2.0'],['Technical','1 × 0.5 + 0 × 0.866','0.5','1.0'],['Review','1 × 0 + 0 × 1','0.0','0.0']];
+ rows.forEach((r,i)=>{const y=322+i*72,on=Math.min(2,Math.floor(t*3))===i;s+=rect(53,y-30,1175,59,on?C.tealSoft:C.soft);r.forEach((v,j)=>s+=text(xs[j],y+9,v,j===1?24:26,j===3?C.teal:C.ink,j===3?600:400));s+=arrow(847,y,996,y,on?C.teal:C.edge)+text(916,y-8,'÷ 0.5',15,C.muted,400,'middle');});
+ return s+text(76,529,'The implementation uses a learned scale × cosine; 1/τ is the equivalent teaching form.',18,C.muted);
+}
+function softmaxScene(t){
+ let s=text(61,218,'Three scores: [2, 1, 0]',23,C.ink,600),p=ease(t*1.5);
+ ['Candidate','Score','exp(score)','Divide by total','Probability'].forEach((v,i)=>s+=text([62,257,393,609,884][i],269,v,18,C.muted,600));
+ const sum=scores.reduce((s,v)=>s+Math.exp(v),0);
+ ['Billing','Technical','Review'].forEach((name,i)=>{const y=323+i*70;s+=text(62,y,name,25,C.ink,i===0?600:400)+text(260,y,scores[i],25)+text(393,y,fmt(Math.exp(scores[i]),3),25)+text(610,y,`÷ ${fmt(sum,3)}`,24,C.muted);s+=rect(883,y-23,238,27,C.soft,'none',5)+rect(883,y-23,238*probs[i]*p,27,i===0?C.teal:C.blue,'none',5)+text(1140,y,fmt(probs[i]*100,1)+'%',23,C.ink,600);});
+ s+=line(391,490,797,490,C.edge)+text(394,522,`Total = ${fmt(sum,3)}`,23,C.teal,600)+text(883,522,'Sum = 100%',23,C.teal,600);return s;
+}
+function outputScene(t){
+ let s=rect(54,214,577,307,C.tealSoft)+badge(80,239,146,'SELECTED OPTION');
+ s+=text(81,326,'billing',62,C.teal,600)+text(84,372,fmt(probs[0]*100,1)+'% of this candidate distribution',24)+text(84,437,'Application action',16,C.muted,600)+text(84,477,'Route to the billing team',29,C.ink,600);
+ s+=arrow(651,368,731,368,C.teal)+pulse(651,368,731,368,t,C.teal);
+ s+=rect(754,214,473,307,C.soft)+text(780,247,'STRUCTURED RESULT · TOY EXAMPLE',14,C.muted,600);
+ const json=['{','  "choice": "billing",','  "probabilities": {',`    "billing": ${fmt(probs[0],4)},`,`    "technical": ${fmt(probs[1],4)},`,`    "human_review": ${fmt(probs[2],4)}`,'  }','}'];
+ s+=`<g font-family="Menlo, Consolas, monospace">${lines(780,283,json,21,C.ink,28)}</g>`;return s;
+}
+
+function pairsScene(t){
+ let s=text(68,224,'State',20,C.muted,600)+text(755,224,'Checked action',20,C.muted,600);
+ const rows=[['Charged twice','Investigate duplicate billing'],['Cannot sign in','Start account recovery'],['Package has not arrived','Check delivery status']];
+ rows.forEach((r,i)=>{const y=274+i*91;s+=rect(53,y-29,498,68,C.blueSoft)+text(77,y+13,r[0],25)+rect(730,y-29,496,68,C.goldSoft)+text(753,y+13,r[1],24)+arrow(565,y+4,713,y+4,C.teal)+pulse(565,y+4,713,y+4,clamp(t*3-i),C.teal);});return s;
+}
+function lossScene(t){
+ let s=text(57,215,'Pair scores Z · illustrative batch',22,C.ink,600);
+ const labels=['Billing','Login','Delivery'];
+ labels.forEach((v,i)=>s+=text(260+i*127,258,v,18,C.muted,500,'middle'));
+ const col=t>.5,step=Math.min(2,Math.floor((col?t-.5:t)*6));
+ for(let i=0;i<3;i++){s+=text(62,321+i*73,labels[i],18,C.muted);for(let j=0;j<3;j++){const x=202+j*127,y=281+i*73,positive=i===j;s+=rect(x,y,115,59,positive?C.tealSoft:C.soft,((col?j:i)===step)?C.teal:'none',8)+text(x+57.5,y+39,positive?'3':'0',28,positive?C.teal:C.muted,600,'middle');}}
+ s+=text(59,539,col?'Column view: action → matching state':'Row view: state → matching action',21,C.teal,600);
+ const p=Math.exp(3)/(Math.exp(3)+2),loss=-Math.log(p);
+ s+=rect(663,235,564,294,C.soft)+text(690,277,'One positive among three alternatives',23,C.ink,600)+text(690,325,'p(correct) = exp(3) / (exp(3) + 1 + 1)',23,C.teal)+text(690,369,`p(correct) = ${fmt(p,3)}`,28,C.teal,600)+text(690,415,`−log(${fmt(p,3)}) = ${fmt(loss,3)}`,28,C.ink,600)+text(690,467,'Average across rows, then across columns.',20,C.muted)+text(690,500,'This toy matrix has the same loss both ways.',18,C.muted);return s;
+}
+function updateScene(t){
+ let s=rect(54,241,307,230,C.blueSoft)+text(79,282,'Qwen3-8B',29,C.ink,600)+badge(79,304,202,'NO WEIGHT UPDATES',C.blue,C.blueSoft)+text(79,381,'36 transformer blocks',22,C.blue)+text(79,423,'Pretrained features stay fixed.',18,C.muted);
+ s+=rect(472,241,382,230,C.goldSoft)+text(499,282,'State + action heads',26,C.ink,600)+net(531,361,t,C.gold)+text(498,449,'θ changes · learned scale changes too',18,C.gold);
+ s+=rect(967,273,261,169,C.soft)+text(1097,317,'Contrastive loss',23,C.ink,600,'middle')+text(1097,363,'L',42,C.teal,600,'middle')+text(1097,409,'error signal',18,C.muted,400,'middle');
+ s+=arrow(956,361,870,361,C.gold,3)+pulse(956,361,870,361,t,C.gold)+text(898,261,'backprop',15,C.gold,500,'middle');
+ s+=line(403,329,403,395,C.blue,5)+text(406,418,'stop',16,C.blue,500,'middle');
+ s+=rect(472,490,756,45,C.soft)+text(497,521,`Illustrative weight:  1.00 → ${fmt(mix(1,.96,ease(t)),2)}     (η = 0.10, gradient = 0.40)`,23,C.ink);return s;
+}
+function afterTrainingScene(t){
+ let s=badge(56,205,266,'INFERENCE · ALL WEIGHTS FIXED',C.blue,C.blueSoft);
+ const parts=[{x:55,w:226,a:'New message',b:'Charged twice'},{x:337,w:252,a:'Frozen Qwen',b:'Encode text'},{x:645,w:252,a:'Learned heads',b:'Project + compare'},{x:954,w:273,a:'Decision',b:'billing'}];
+ parts.forEach((r,i)=>{s+=rect(r.x,297,r.w,151,i===3?C.tealSoft:i===2?C.goldSoft:C.blueSoft)+text(r.x+r.w/2,343,r.a,25,C.ink,600,'middle')+text(r.x+r.w/2,398,r.b,22,i===3?C.teal:C.muted,400,'middle');if(i<3)s+=arrow(r.x+r.w+9,372,parts[i+1].x-12,372,C.teal)+pulse(r.x+r.w+9,372,parts[i+1].x-12,372,clamp(t*3-i),C.teal);});
+ s+=text(640,511,'No gradient step is performed when answering this request.',24,C.ink,500,'middle');return s;
+}
+const renderers=[inputScene,tokensScene,backboneScene,attentionScene,poolingScene,headsScene,layerScene,normalizeScene,scoresScene,softmaxScene,outputScene];
+const trainingRenderers=[pairsScene,lossScene,updateScene,afterTrainingScene];
+function scenes(mode){return mode==='training'?training:inference;}
+function duration(mode){return scenes(mode).reduce((s,v)=>s+v.duration,0);}
+function locate(mode,time){const list=scenes(mode);let left=clamp(time,0,duration(mode));for(let i=0;i<list.length;i++){if(left<list[i].duration||i===list.length-1)return {index:i,progress:clamp(left/list[i].duration),scene:list[i]};left-=list[i].duration;}}
+function startOf(mode,index){return scenes(mode).slice(0,index).reduce((s,v)=>s+v.duration,0);}
+function render(mode,time,reduced=false){const {index,progress,scene}=locate(mode,time);return frame(scene,index,scenes(mode).length,(mode==='training'?trainingRenderers:renderers)[index](reduced?1:progress),mode);}
+global.CLMAnimation={render,scenes,duration,locate,startOf,math:{norm,dot,softmax,unitState,actions,scores,probs,temperature,toyLayer},colors:C};
+})(typeof window!=='undefined'?window:globalThis);
+</script><script>(function(){
+'use strict';
+const A=window.CLMAnimation;
+const el=id=>document.getElementById(id);
+const stage=el('stage'),play=el('play'),timeline=el('timeline'),chapters=el('chapters');
+const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let mode='inference',time=0,playing=false,rate=1,last=null,raf=null,shownIndex=-1;
+const format=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+function update(){
+ const total=A.duration(mode),at=A.locate(mode,time);
+ stage.innerHTML=A.render(mode,time,reduced);
+ timeline.max=total;timeline.value=time;timeline.setAttribute('aria-valuetext',`${at.scene.short}, ${format(time)} of ${format(total)}`);
+ el('time').textContent=format(time)+' / '+format(total);
+ play.textContent=playing?'Ⅱ Pause':time>=total?'↻ Replay':'▶ Play';
+ el('previous').disabled=at.index===0;el('next').disabled=at.index===A.scenes(mode).length-1;
+ if(shownIndex!==at.index){
+  Array.from(chapters.children).forEach((b,i)=>{if(i===at.index)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+  el('status').textContent=`${mode==='training'?'Training':'Inference'} · Step ${at.index+1}: ${at.scene.title}`;
+  el('mobile-summary').textContent=at.scene.title+' '+at.scene.note.join(' ');
+  shownIndex=at.index;
+ }
+}
+function stop(){playing=false;last=null;if(raf!==null)cancelAnimationFrame(raf);raf=null;}
+function tick(now){
+ if(!playing)return;
+ if(last!==null)time=Math.min(A.duration(mode),time+Math.min((now-last)/1000,.2)*rate);
+ last=now;
+ if(time>=A.duration(mode))stop();
+ update();if(playing)raf=requestAnimationFrame(tick);
+}
+function toggle(){
+ if(playing)stop();
+ else{if(time>=A.duration(mode))time=0;playing=true;last=null;raf=requestAnimationFrame(tick);}
+ update();
+}
+function jump(index){stop();time=A.startOf(mode,Math.max(0,Math.min(A.scenes(mode).length-1,index)));update();}
+function setMode(nextMode){
+ stop();mode=nextMode;time=0;shownIndex=-1;
+ el('inference').setAttribute('aria-pressed',String(mode==='inference'));el('training').setAttribute('aria-pressed',String(mode==='training'));
+ chapters.replaceChildren();
+ A.scenes(mode).forEach((s,i)=>{const b=document.createElement('button');b.textContent=(i+1)+'. '+s.short;b.addEventListener('click',()=>jump(i));chapters.appendChild(b);});
+ update();
+}
+play.addEventListener('click',toggle);
+el('previous').addEventListener('click',()=>jump(A.locate(mode,time).index-1));
+el('next').addEventListener('click',()=>jump(A.locate(mode,time).index+1));
+el('inference').addEventListener('click',()=>setMode('inference'));
+el('training').addEventListener('click',()=>setMode('training'));
+timeline.addEventListener('input',()=>{stop();time=Math.max(0,Math.min(A.duration(mode),Number(timeline.value)||0));update();});
+el('speed').addEventListener('change',()=>{rate=Number(el('speed').value)||1;});
+el('fullscreen').addEventListener('click',async()=>{
+ try{if(document.fullscreenElement)await document.exitFullscreen();else if(stage.requestFullscreen)await stage.requestFullscreen();else el('status').textContent='Full screen is not supported by this browser; enlarge the window to view the slide.';}
+ catch{el('status').textContent='Full screen could not open; enlarge the window to view the slide.';}
+});
+document.addEventListener('keydown',e=>{
+ if(['INPUT','SELECT','TEXTAREA','BUTTON','A','SUMMARY'].includes(e.target.tagName)||e.ctrlKey||e.altKey||e.metaKey)return;
+ if(e.code==='Space'){e.preventDefault();toggle();}
+ if(e.code==='ArrowRight'){e.preventDefault();jump(A.locate(mode,time).index+1);}
+ if(e.code==='ArrowLeft'){e.preventDefault();jump(A.locate(mode,time).index-1);}
+});
+document.addEventListener('visibilitychange',()=>{last=null;});
+setMode('inference');
+})();
+</script></body></html>
