@@ -46,7 +46,7 @@ Follow Kev's published **LoRA plus pointer-head** architecture. First train a fr
 
 **You train Pac-Man. Four ghosts use the classic arcade engine.** The faithful browser recreation supplies the classic maze, original renderer/font/sounds, power pellets, fruit, tunnels, lives and chase/scatter phases. Kev chooses player directions; upstream code controls Blinky, Pinky, Inky and Clyde.
 
-0–10 compare architectures and play; 10–20 inspect initial training; 20–30 prepare player labels; **30–60 mandatory fine-tuning**; 60–80 compare; 80–90 debrief. Installation, downloads and the four general-decision training stages are prework, so we can keep the published recipe and the 90-minute class.
+The lab has **one assessed checkpoint: CP1 — fine-tune and evaluate Kev on Pac-Man game states**. Interactive play with the trained adapter is a separate, ungraded activity. The 90-minute route is 0–20 overview and interactive play; 20–30 inspect planning labels; **30–60 mandatory fine-tuning**; 60–80 evaluate; 80–90 explain and submit the checkpoint evidence. Installation, downloads, label generation and the four general-decision training stages are prework.
 
 The target runtime is **Colab with one NVIDIA RTX PRO 6000 Blackwell GPU**. The full Server Edition has 96 GB VRAM. Check the actual allocation in the prework cell. The notebook uses BF16 inference and training autocast, with FP32 stored backbone, adapter and head parameters in the initial recipe. Colab does not guarantee this GPU, including on paid plans. Arrange access before class and record actual runtime cost. All stages still need an instructor GPU preflight.
 
@@ -355,10 +355,10 @@ else:
 
 On a new runtime or after refreshing the bootstrap, run `runtime.setup()`, optimized preparation with `RUN_TRAINING_PREFLIGHT=False`, and the storage cell first. Bootstrap creates a new runtime helper; these cells establish its hardware, training and backup settings while reusing cached files. If using the automatic Drive backup, keep the complete `kev-4b-skills` backup folder (including `latest.json`, ZIPs and their `.zip.json` receipts) at `MyDrive/QPlusLearning/lab-01-kev-pacman/backups/kev-4b-skills`. With `SAVE_TO_DRIVE=True`, storage restores the completed native checkpoint to `/content/pacman-kev-lab/checkpoints/kev-4b-skills`.
 
-**When Skills is already complete, skip the Stage 1–4 training and backup/export cells. Run the cell below, then CP0–CP5.** It loads the completed Skills model, reads available saved stage metrics and starts inference. It does not resume Skills training or require the Documents checkpoint. Earlier stage weights and training curves are available only if you also restored them; their absent archives are reported in the submission.
+**When Skills is already complete, skip the Stage 1–4 training and backup/export cells. Run the cell below, then the single CP1 exercise.** The interactive play cell is available before and after fine-tuning. This cell loads the completed Skills model, reads available saved stage metrics and starts inference. It does not resume Skills training or require the Documents checkpoint. Earlier stage weights and training curves are available only if you also restored them; their absent archives are reported in the submission.
 
-Set Skills ownership to `instructor` below if the instructor supplied this checkpoint. CP0 plays with this general model; CP3 fine-tunes it on your reviewed Pac-Man labels.""")
-    code("""# Load completed Skills checkpoint and start CP0
+Set Skills ownership to `instructor` below if the instructor supplied this checkpoint. Interactive play initially uses this general model; CP1 fine-tunes it on your reviewed Pac-Man labels.""")
+    code("""# Load completed Skills checkpoint for the lab
 from pathlib import Path
 import json
 CHECKPOINT_ROOT = LAB_DIR / 'checkpoints'
@@ -395,13 +395,13 @@ print(json.dumps(models, indent=2))
     md("""## Calibration is separate from training
 
 Kev's release fitted one probability temperature after its four training stages. We do not copy that fitted value into freshly trained checkpoints. This notebook keeps their own raw probabilities. A workload calibration experiment needs suitable held-out labels and is outside the mandatory 30-minute Pac-Man fine-tuning block. It does not update LoRA/head weights or change the top-ranked action.""")
-    md("""## CP0: play, then give Kev the controls (0–10 minutes)
+    md("""## Interactive play — trained Kev at the controls
 
 Try **Human** mode with arrows/WASD; click the board for keyboard focus. Restart, select **Kev**, and watch its choices. Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing a direction at each tile center, then player and all four ghosts advance using upstream speeds/timers. Wall-clock survival is not a fair skill metric. Pause before running training cells.
 
-The **Active LoRA + pointer head** badge should show `kev-4b-skills` at CP0: general Skills training, no Pac-Man fine-tuning. CP4 loads `kev-4b-pacman-planner-v1`. Expand the details for paths and SHA-256 fingerprints. The badge and traces verify the serving model card; `kev-latest` alone is an API alias.
+This activity is available before and after the checkpoint. The **Active LoRA + pointer head** badge initially shows `kev-4b-skills`: general Skills training, no Pac-Man fine-tuning. CP1's evaluation loads `kev-4b-pacman-planner-v1`; rerun this same play cell afterward to play with that adapter. Expand the details for paths and SHA-256 fingerprints. The badge and traces verify the serving model card; `kev-latest` alone is an API alias.
 
-Colab supplies the notebook callback below. On Kaggle, use the structured decision cell and Python rollouts instead. API errors pause visibly; the game does not replace failed player decisions with a hidden rules controller.""")
+Colab supplies the notebook callback below. On Kaggle, use the Python evaluation and rollouts instead. API errors pause visibly; the game does not replace failed player decisions with a hidden rules controller. Pause play before training, and finish interactive play before exporting results.""")
     code("""from IPython.display import display, HTML, JSON
 bridge = NotebookBridge(LAB_DIR / 'results/player-trace.jsonl', runtime.active_model_info)
 try:
@@ -413,20 +413,13 @@ else:
     output.register_callback('pacman.model', lambda: JSON(bridge.model()))
     display(HTML(GAME))
 """)
-    md("""## CP1: inspect the training stages and a player decision (10–20 minutes)
+    md("""## CP1 — Fine-tune and evaluate Kev on Pac-Man game states
 
-Inspect `initial_config`, `dates_config`, `documents_config`, `skills_config`, `stage_metrics` and `trainable-parameters.json`. Open TensorBoard and compare the four separate runs. Find the fresh pointer head, trainable LoRA parameters and fixed original base matrices. Explain why gradients still travel through the encoder. The four general stages learn typed decisions, dates/evidence, documents, and skills/devtools; none has seen Pac-Man labels.
+Use the committed planning-labelled game states to adapt your completed Skills LoRA/head, then compare the baseline and task adapter on the same held-out boards. This is the lab's only assessed checkpoint.
 
-Predict the move first. Identify Pac-Man, all four named ghosts, their modes, pellets, recent positions and legal options. Explain why a direction through a wall never appears. The game consumes `answers.move.choice`; inspect probabilities by direction name. Confidence is not the probability of clearing the maze.""")
-    code("""state = initial_state()
-request = body(state)
-print('Player:', state['player'], '\\nGhosts:', state['ghosts'])
-print('Options:', request['questions']['move']['criteria'])
-response, elapsed = call('/v1/systemone', request)
-distribution(response['answers']['move'], request['questions']['move']['criteria'])
-print(json.dumps(response['answers'], indent=2), '\\nHTTP ms:', round(elapsed))
-""")
-    md("""## CP2: inspect and edit labels (20–30 minutes)
+Complete the data review, full task training and paired evaluation below. Submit the trained adapter/head, reviewed training labels, curves and `comparison.json`, with a short explanation of one changed move and one remaining mistake. Explain how the native ghost rules affect a planning label and why the search is approximate. Completion requires the full 762-update recipe, no dropped/truncated records, and recorded before/after measurements; improvement is an experimental result to measure.
+
+### Inspect the planning data (20–30 minutes)
 
 Data has **4,096 training, 256 development and 256 evaluation** snapshots from valid native-engine trajectories, starting at levels 1, 2, 3 and 5. At every labelled board, the teacher simulates up to **20 future player moves** for every legal first action, retaining **eight paths per first action** under **two independent frightened-mode randomness scenarios**. Chase/scatter movement is predicted from each ghost's deterministic native targeting rule, rather than a random walk. Native code handles speeds, timers, release counters, collisions, power pellets, fruit and score.
 
@@ -460,7 +453,7 @@ print('CPU teacher comparison:', json.loads((LAB_DIR / 'data/pacman-planner-v1-q
 before_dev = evaluate(LAB_DIR / 'data/pacman-planner-v1-development.jsonl')
 print('Development accuracy:', before_dev['accuracy'])
 """)
-    md("""## Stage 5 / CP3: fine-tune Pac-Man decisions (30–60 minutes)
+    md("""### Stage 5 — Fine-tune Pac-Man decisions (30–60 minutes)
 
 30-minute block: 5 minutes inspect a labelled request and the loss; target up to 20 minutes training; 5 minutes inspect and save the checkpoint. This is supervised imitation. Kev updates the same all-module rank-16 LoRA adapters and 256-dimensional pointer head as the preceding stages; original base matrices stay frozen. Planning happens only when producing labels, not inside the training loss or the model controller.
 
@@ -492,7 +485,7 @@ assert metrics['optimizer_steps'] == manifest['expected_optimizer_steps'], 'Comp
 assert not metrics.get('truncated_records', 0) and not metrics.get('rejected_records', 0), 'No state truncation or dropped records'
 assert metrics['records_seen'] == metrics['requested_records'] == manifest['expected_training_requests'], 'Complete one epoch including replay'
 """)
-    md("""## CP4: before/after on the same decisions (60–72 minutes)
+    md("""### Evaluate the baseline and task adapter (60–80 minutes)
 
 The candidate is now fixed. Score both models on the same **256 evaluation snapshots** and save predictions by ID. Report strict and tie-aware teacher agreement, lower search-survival choices, search-value regret within the same survival class, and immediate captures. These are comparisons with an approximate teacher, not full-game win rates. Fine-tuning may leave answers unchanged or make them worse.""")
     code("""runtime.start(GENERAL)
@@ -508,20 +501,14 @@ comparison['pacman_dataset'] = manifest
 (LAB_DIR / 'comparison.json').write_text(json.dumps(comparison, indent=2))
 for name, result in [('general', before), ('fine_tuned', after)]:
     print(name, {key:result[key] for key in ['accuracy', 'tie_aware_teacher_accuracy', 'lower_search_survival_choices', 'mean_same_survival_search_regret', 'caught_next_turn']})
+for name, episode in [('general', before_run), ('fine_tuned', after_run)]:
+    print(name, {key:episode[key] for key in ['turns', 'dots_collected', 'score', 'repeated_tiles', 'outcome']})
 """)
-    md("""## CP4 continued: watch Pac-Man play (72–80 minutes)
+    md("""The evaluation leaves your Pac-Man task adapter serving. You can now rerun **Interactive play** above, choose **Kev**, and start a new game. Verify the badge says `kev-4b-pacman-planner-v1`. This remains an ungraded activity. Both Python rollouts use the same starting board, seed, native engine and 128-decision cap, stopping at the first lost life or completed level; the browser retains three lives and level progression. The trajectories illustrate behavior rather than a win-rate estimate. The archived five-seed CPU report evaluates the planning teacher itself, which can also fail.
 
-Repeat CP0's browser cell, choose **Kev**, and start a new game. Confirm the badge says `kev-4b-pacman-planner-v1`, Pac-Man fine-tuned. Both Python rollouts use the same starting board, seed, original engine and 128-decision cap, stopping at the first lost life or completed level. The browser retains all three lives and level progression. Compare score, pellets, repeated tiles and decisions; these trajectories illustrate behavior, not a win-rate estimate.
+### Explain and export the checkpoint evidence (80–90 minutes)
 
-Compare with the planning controller below and the archived five-seed CPU comparison with the old heuristic. The teacher itself can fail. The model learns from structured state; there is no screenshot encoder or frame-by-frame RL training in this exercise.""")
-    code("""for name, episode in [('general', before_run), ('fine_tuned', after_run)]:
-    print(name, {k:episode[k] for k in ['turns', 'dots_collected', 'score', 'repeated_tiles', 'outcome']})
-rule_run = planner_rollout(turns=128)
-print('planning teacher', rule_run)
-""")
-    md("""## CP5: explain and submit (80–90 minutes)
-
-Explain one changed move and one confident mistake. Trace `kev/api.py:to_record`, `kev/model.py:encode` / `PointerHead`, and `kev/train.py`. The lecture's CLM uses separate state/action representations and InfoNCE; Kev scores option-token representations with a pointer head and supervised cross-entropy. They are related decision systems with different training architectures.
+Explain one changed move and one remaining mistake. Relate a planning label to the board and ghost personalities. Identify the LoRA/head parameters that trained and the limitations of finite-horizon beam search.
 
 Submit the executed notebook, reviewed training JSONL, `comparison.json`, all available small adapter/head checkpoints and stage configurations/metrics, training logs and TensorBoard events and `runtime-preflight.json`. A full fresh run produces five checkpoints. If you continued from a completed intermediate checkpoint without older archives, record those missing stages; the imported checkpoint retains its recorded parent provenance, but absent parent weights cannot be rechecked or exported. Record the Colab compute units consumed and elapsed GPU time from your session. Save outputs before the temporary runtime disconnects, then stop the server. On Colab, run the download cell.""")
     code("""runtime.stop()

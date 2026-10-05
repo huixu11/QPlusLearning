@@ -23,7 +23,7 @@ footer{font-size:12px;margin-top:20px;color:#9fa9c6}a{color:#97bdff}details{marg
 <p class="small">Click the board to use the keyboard in Human mode. Sounds start after interaction; mute this tab if needed.</p>
 <p class="small">Human mode runs at 60 simulation frames per second. Kev pauses the simulation while choosing each move. Ghost speeds and timers use the original engine’s simulation clock.</p>
 <p class="small">Ghosts leave the house gradually, using pellet counters or a simulation-time timeout. Blinky chases directly; Pinky aims ahead; Inky uses Blinky’s position; Clyde retreats when close.</p>
-<p class="small">The Skills adapter has general decision training. CP3 teaches it Pac-Man. A legal move or high probability does not guarantee good play.</p></div></div>
+<p class="small">The Skills adapter has general decision training. Pac-Man fine-tuning teaches it the game. A legal move or high probability does not guarantee good play.</p></div></div>
 <footer>Classic mode from <a href="https://github.com/masonicGIT/pacman">masonicGIT/pacman</a>, pinned 7407174 (GPL-3.0). Original upstream maze, drawing, font, sounds and game mechanics. An arcade recreation with <a href="https://github.com/masonicGIT/pacman#accuracy">documented differences</a>. The model controls Pac-Man; Blinky, Pinky, Inky and Clyde use upstream code.</footer>
 </div><script>
 (function(){
@@ -36,7 +36,7 @@ function identity(info){
  document.getElementById('details').textContent=info.checkpoint+' | '+info.base+' | checkpoint SHA-256 '+(info.checkpoint_sha256||'unavailable')+' | adapter SHA-256 '+(info.adapter_sha256||'unavailable');
 }
 async function callback(name,arg){
- if(!globalThis.google?.colab?.kernel?.invokeFunction)throw new Error('Open this game through CP0 in Colab to connect the trained model. Human mode still works.');
+ if(!globalThis.google?.colab?.kernel?.invokeFunction)throw new Error('Open the Interactive play section in Colab to connect the trained model. Human mode still works.');
  const result=await google.colab.kernel.invokeFunction(name,arg===null?[]:[arg],{});
  const data=result.data?.['application/json'];if(!data)throw new Error('The notebook callback did not return JSON.');return data;
 }
