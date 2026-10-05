@@ -6,7 +6,17 @@ Train **Kev-4B** with its published LoRA plus pointer-head architecture, then te
 
 The lab has **one assessed checkpoint: CP1 — Fine-tune and evaluate Kev on Pac-Man game states**. Review the planning labels, train the task adapter, compare it with the Skills baseline, and submit the evidence. **Interactive play** is a separate, ungraded activity available before and after fine-tuning; its badge identifies the running LoRA and pointer head.
 
-Use [the notebook](notebooks/pacman_kev_lab.ipynb), [Colab setup](COLAB_SETUP.md) and the [native lab slides](https://docs.google.com/presentation/d/1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ/edit). The slides retain the Kev/CLM comparison and now show the 4B curriculum; local exports are [PDF](slides/pacman-lab.pdf) and [PPTX](slides/pacman-lab.pptx).
+Use [the notebook](notebooks/pacman_kev_lab.ipynb), [Colab setup](COLAB_SETUP.md) and the **[15-slide lab deck](https://docs.google.com/presentation/d/1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ/edit)**. Local exports are [PDF](slides/pacman-lab.pdf) and [PPTX](slides/pacman-lab.pptx).
+
+| Slides | What learners do |
+| --- | --- |
+| 1–5 | Compare Kev/CLM architectures, tradeoffs, costs, performance evidence and serving readouts |
+| 6 | Open the existing CLM animation and follow the linked softmax, contrastive-head and LoRA maths |
+| 7–9 | Follow the 90-minute route, prepare Colab and identify the five separate training stages |
+| 10–11 | Try ungraded native Pac-Man play and review the ghost-aware planning labels |
+| 12–15 | Complete CP1: train, monitor/recover, evaluate and submit measured evidence |
+
+The [companion CLM lecture](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit) supplies the [65-second animation](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A), [softmax explanation](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_08#slide=id.clm_stage_08), [CLM head-training maths](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10), [LoRA identity](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44) and [evaluation framework](https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49). Slide 6 also links the existing [interactive HTML controls](https://drive.google.com/file/d/1ziqTDAN0kxP_fzGQwfJ-C6fQS2cQBcfh/view?usp=drivesdk): download the HTML and open it in a browser using the existing Drive access. PDF exports are static. The CLM animation shows frozen independent encoders and two projection heads; Kev uses joint encoding, LoRA and a pointer head. The lecture's joint language/decision loss is a proposal, separate from this lab's Kev decision loss.
 
 The target is **one NVIDIA RTX PRO 6000 Blackwell GPU in Colab**. The full Server Edition has 96 GB VRAM. Arrange access before class, inspect the actual allocation, and record elapsed time and compute units. Colab does not guarantee this GPU or free access.
 

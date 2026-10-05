@@ -88,12 +88,18 @@
     }
   },
   "slides": {
-    "count": 23,
-    "visual_qa": "All 23 current native PDF renders inspected; zero output issues; text/notes readback verified and native slide/element IDs, sizes and transforms preserved",
-    "note": "Single assessed CP1; interactive play retained separately; native planning data and full task recipe unchanged. Nine lab slides plus the first-slide lab note revised.",
-    "revision_id": "c6jJBAVj8qRJsA",
-    "edited_slides": 10,
-    "export_method": "Authenticated Chrome native export; connector export download URI unavailable locally and unauthenticated export requires permission; sharing unchanged"
+    "count": 15,
+    "visual_qa": "All 15 final PDF renders inspected; cost table overlap and equation glyphs repaired. Native text, tables, notes, numbering and links verified; native masters/geometry preserved.",
+    "note": "Condensed 23 slides to 15. Costs, serving and evaluation details merged into retained slides/notes. Nine links to the original CLM animation, HTML controls and maths deck. Single CP1 and separate ungraded gameplay retained. No training/notebook change.",
+    "revision_id": "jZoNC2keBOyt4g",
+    "edited_slides": 15,
+    "export_method": "Authenticated Chrome native export; connector export download URI unavailable locally and unauthenticated export requires permission; sharing unchanged",
+    "native_hyperlinks": 9,
+    "pdf_pages": 15,
+    "pptx_slides": 15,
+    "output_issues": 0,
+    "companion_lecture_id": "1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo",
+    "companion_lecture_revision": "5KsymlbBib7kdw"
   },
   "gpu_training": "full_optimized_kev_4b_curriculum_not_run_by_course_author",
   "live_colab_callback": "not_run",
@@ -101,8 +107,8 @@
   "sha256": {
     "notebooks/pacman_kev_lab.ipynb": "9461184f820ced47119f758131bd321dc47045758040e383398ee3f493f86d0d",
     "games/pacman.html": "a443fa6a0c1d41ea3f391ee6e624ee4bf0ce9ce195659732b66b9db27123f8c4",
-    "slides/pacman-lab.pdf": "486ab40c6ff8a6feffd6b6944bbc591a3ef20e208ace393bf68ed6c68a6bff24",
-    "slides/pacman-lab.pptx": "5e5d22ecf6cb8277c5c104dbfbb8b97e4938c4273705f547b809dcd5973650b2",
+    "slides/pacman-lab.pdf": "bc32a5dc1065454a9764500a4e7de2042f2f34dbd03650fd0c866a003b5470b5",
+    "slides/pacman-lab.pptx": "555b7b70002ee57b9ed4b985677e3c7d6802bdec0cd062406d760e4f11f96ceb",
     "data/pacman-planner-v1.zip": "a6f7e5282e888ede6a24f28cc7dffdb7d3cf51776ec5c9d6adefcf6e15e9e6a1",
     "data/pacman-planner-v1-manifest.json": "3c22ede98985264b46410dc14026eaa22301b79a3f9061cf5063c739fc39b6e2",
     "data/pacman-planner-v1-quality.json": "db6ae0d8b730c7582f3f76e0c0177061d5449cfd55bc87ae3dd4c66277d54fc0"

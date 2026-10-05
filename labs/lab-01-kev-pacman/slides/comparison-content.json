@@ -6,7 +6,7 @@
   "slides": [
     {
       "id": "kev_lab_01",
-      "title": "Kev and CLM",
+      "title": "Kev and CLM: two ways to decide",
       "kind": "table",
       "dark": true,
       "table": [
@@ -38,11 +38,11 @@
       ],
       "body": "Our lab follows Kev's LoRA + pointer-head recipe.",
       "footer": "Pac-Man lab | 90 minutes | 30-minute fine-tuning block",
-      "notes": "Small-model Kev trains low-rank encoder adapters and a pointer head. Original base matrices stay fixed, but effective features change. CLM trains state/action projection heads and a similarity scale over completely fixed LLM features. Kev-27B is a separate full-fine-tuning recipe. The Pac-Man lab uses Kev-4B with four separate general stages, then supervised player-domain adaptation in the single CP1. Interactive play is an ungraded activity. The comparison remains useful for understanding independent action caching and repeated training cost.\nSources: https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py ; https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py ; supplied Contrastive Language Models PDF pages 6-8.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
+      "notes": "Small-model Kev trains low-rank encoder adapters and a pointer head. Original base matrices stay fixed, but effective features change. CLM trains state/action projection heads and a similarity scale over completely fixed LLM features. Kev-27B is a separate full-fine-tuning recipe. The Pac-Man lab uses Kev-4B with four separate general stages, then supervised player-domain adaptation in the single CP1. Interactive play is an ungraded activity. The comparison remains useful for understanding independent action caching and repeated training cost.\nSources: https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py ; https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py ; supplied Contrastive Language Models PDF pages 6-8.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\nCompanion lecture: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit\nAnimate the CLM independent-encoder path: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A"
     },
     {
       "id": "decision_lab_pros",
-      "title": "Kev and CLM: pros and cons",
+      "title": "Why this lab uses Kev",
       "kind": "table",
       "table": [
         [
@@ -71,13 +71,13 @@
         271,
         271
       ],
-      "body": "Accuracy depends on the backbone, data and task.",
+      "body": "Open training stages, LoRA adaptation and a small pointer head.",
       "footer": "Architectural tradeoffs; neither approach is always better",
       "notes": "Kev's joint causal representation can model state/option interactions before its readout. LoRA can adapt those representations but its benefit over a head-only variant requires a controlled ablation. CLM's independent encodings support reusable actions and cached backbone features; its learned heads can remap existing features but cannot guarantee recovery of information absent from the frozen representation. A larger CLM backbone can offset some representation limitations; this is an architectural inference, not a measured accuracy ordering.\nSources: pinned Kev model.py; pinned CLM heads.py and train/finetune.py; supplied CLM PDF pages 6-8.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
     },
     {
       "id": "decision_lab_training_cost",
-      "title": "Training cost",
+      "title": "Training and serving cost",
       "kind": "table",
       "table": [
         [
@@ -86,9 +86,9 @@
           "CLM heads"
         ],
         [
-          "Encoder",
-          "Forward + backward\nduring each training run",
-          "Extract fixed features\nonce for each text"
+          "Training",
+          "Encoder forward + backward\nfor adapters and head",
+          "Extract fixed features\nthen train two heads"
         ],
         [
           "Repeat runs",
@@ -96,9 +96,9 @@
           "Reuse feature cache\nTrain heads only"
         ],
         [
-          "Budget",
-          "Encoder activations\nplus adapter optimizer",
-          "Feature extraction cost\nplus head optimizer"
+          "Serving",
+          "Encode state and options\nReuse a shared prefix",
+          "Encode changing state\nReuse action vectors"
         ]
       ],
       "widths": [
@@ -106,48 +106,13 @@
         271,
         271
       ],
-      "body": "Compare total cost: feature extraction + all training runs.",
-      "footer": "CLM's reported ~1-hour run assumes precomputed embeddings",
-      "notes": "Conceptual accounting, not dollar estimates: CLM total work = feature extraction + the sum of head-training runs; Kev LoRA = the sum of encoder forward/backward plus head/adapter training runs. A feature cache can be reused across random seeds and head settings while backbone, tokenizer, pooling and input recipe stay fixed. The CLM PDF reports about one hour on an RTX 4090 for the Nemotron head pretraining run after describing precomputed LLM embeddings. It does not establish the end-to-end time including extraction, download, dataset preparation or synthetic-negative generation. A LoRA model has fewer trainable parameters than full fine-tuning but still needs encoder activations and backpropagation. Free quotas change payments, not the amount of compute. Record actual hardware-hours rather than inventing prices.\nSources: supplied CLM PDF page 6; https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py ; pinned Kev model.py and train.py.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
-    },
-    {
-      "id": "decision_lab_serving_cost",
-      "title": "Serving cost and model size",
-      "kind": "table",
-      "table": [
-        [
-          "Factor",
-          "Kev",
-          "CLM"
-        ],
-        [
-          "Each new state",
-          "Encode state and options\nScore pointer outputs",
-          "Encode state + question\nScore cached actions"
-        ],
-        [
-          "Useful cache",
-          "Shared state prefix\nacross questions",
-          "Independent action vectors\nacross changing states"
-        ],
-        [
-          "BF16 weights*",
-          "0.8B: ~1.6 GB\n4B: ~8 GB",
-          "8B reference: ~16 GB\nTwo paths can share weights"
-        ]
-      ],
-      "widths": [
-        106,
-        271,
-        271
-      ],
-      "body": "*Parameter count × 2 bytes; excludes heads, cache and runtime.",
-      "footer": "Raw weight arithmetic is not a measured VRAM requirement",
-      "notes": "Decimal GB estimates use rounded parameter counts and BF16's two bytes per parameter. They exclude tokenizer/embedding peculiarities, heads, KV or recurrent state, activations, quantization metadata and runtime overhead. Do not present these as peak memory measurements. CLM's state and action paths can use one shared frozen backbone instance. CLM action reuse saves repeated action token encoding; it is especially useful with repeated or many/long actions. It does not guarantee that released CLM-8B beats released Kev-0.8B or Kev-4B on four short directions. Quantization and backend implementations also affect serving cost and accuracy.\nSources: https://github.com/jaredpalmer/kev ; https://github.com/Contrastive-LM/CLM ; supplied CLM PDF pages 6-8.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
+      "body": "Total cost = feature extraction + training + serving.",
+      "footer": "Record measured GPU time and compute units; include feature extraction.",
+      "notes": "Conceptual accounting, not dollar estimates: CLM total work = feature extraction + the sum of head-training runs; Kev LoRA = the sum of encoder forward/backward plus head/adapter training runs. A feature cache can be reused across random seeds and head settings while backbone, tokenizer, pooling and input recipe stay fixed. The CLM PDF reports about one hour on an RTX 4090 for the Nemotron head pretraining run after describing precomputed LLM embeddings. It does not establish the end-to-end time including extraction, download, dataset preparation or synthetic-negative generation. A LoRA model has fewer trainable parameters than full fine-tuning but still needs encoder activations and backpropagation. Free quotas change payments, not the amount of compute. Record actual hardware-hours rather than inventing prices.\nSources: supplied CLM PDF page 6; https://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py ; pinned Kev model.py and train.py.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\n\nSupplement: Serving cost and model size\nDecimal GB estimates use rounded parameter counts and BF16's two bytes per parameter. They exclude tokenizer/embedding peculiarities, heads, KV or recurrent state, activations, quantization metadata and runtime overhead. Do not present these as peak memory measurements. CLM's state and action paths can use one shared frozen backbone instance. CLM action reuse saves repeated action token encoding; it is especially useful with repeated or many/long actions. It does not guarantee that released CLM-8B beats released Kev-0.8B or Kev-4B on four short directions. Quantization and backend implementations also affect serving cost and accuracy.\nSources: https://github.com/jaredpalmer/kev ; https://github.com/Contrastive-LM/CLM ; supplied CLM PDF pages 6-8.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\nMaths and cache context: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_03#slide=id.clm_stage_03"
     },
     {
       "id": "decision_lab_performance",
-      "title": "Performance evidence",
+      "title": "Performance: compare like with like",
       "kind": "table",
       "table": [
         [
@@ -176,13 +141,13 @@
         240,
         239
       ],
-      "body": "These reports do not establish a Kev-versus-CLM speed ranking.",
-      "footer": "Different hardware and workloads; use a paired lab benchmark",
-      "notes": "CLM PDF page 7: a 200-token state, 15 tokens per candidate, one RTX 4090 and five trials; latency rises from 36 ms for one cached candidate to 44 ms for 1,024. Its ~13x at 1,024 candidates is versus hosted Jev, not Kev. The llama.cpp announcement reports a 12 ms median for Kev-4B on RTX PRO 6000 for one question; it is not a matched run against CLM. Never divide 36 by 12 to infer a comparative speedup. No matched Kev-vs-CLM Pac-Man benchmark was identified in the reviewed sources. Their published accuracy suites and training data differ. Our 16-board sample is only a demonstration, not evidence of general superiority.\nSources: supplied CLM PDF page 7; https://huggingface.co/blog/ggml-org/decision-models-in-llamacpp ; https://github.com/jaredpalmer/kev ; https://github.com/Contrastive-LM/CLM .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
+      "body": "Different hardware and tasks: these are not a head-to-head result.",
+      "footer": "Hold states, actions, precision and hardware fixed; measure skill and latency together.",
+      "notes": "CLM PDF page 7: a 200-token state, 15 tokens per candidate, one RTX 4090 and five trials; latency rises from 36 ms for one cached candidate to 44 ms for 1,024. Its ~13x at 1,024 candidates is versus hosted Jev, not Kev. The llama.cpp announcement reports a 12 ms median for Kev-4B on RTX PRO 6000 for one question; it is not a matched run against CLM. Never divide 36 by 12 to infer a comparative speedup. No matched Kev-vs-CLM Pac-Man benchmark was identified in the reviewed sources. Their published accuracy suites and training data differ. Our paired 256-board Pac-Man evaluation measures Skills versus task adaptation; it does not compare Kev with CLM.\nSources: supplied CLM PDF page 7; https://huggingface.co/blog/ggml-org/decision-models-in-llamacpp ; https://github.com/jaredpalmer/kev ; https://github.com/Contrastive-LM/CLM .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\n\nSupplement: A fair Kev-versus-CLM comparison\nA product comparison can compare actual released checkpoints, but its result combines backbone size, pretraining, decision data, objective, head and runtime. An architecture experiment should match the pretrained backbone, input budget, examples, splits, training budget and hardware, and vary joint pointer/LoRA versus frozen dual-encoder heads deliberately. Include a rule-based teacher baseline. Record encoder time separately from projection/scoring and end-to-end latency; use p50/p95 over enough repeats, cache-cold and action-cache-warm runs, identical quantization where meaningful, peak allocated memory, hardware model and checkpoint IDs. A smaller Kev may cost less at inference despite CLM's reusable actions. This is a proposed protocol, not measured results.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\nEvaluation maths and workload accounting: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49"
     },
     {
       "id": "decision_lab_models",
-      "title": "Models supported by llama.cpp",
+      "title": "Serving: models and readouts",
       "kind": "table",
       "compact": true,
       "table": [
@@ -229,128 +194,165 @@
         193,
         260
       ],
-      "body": "CLM is outside this release's five supported models.",
-      "footer": "Julia, Laya, Kev and lev: Apache 2.0 | OpenJev: CC BY-NC 4.0",
-      "notes": "Supported list is the October 2, 2026 release, not an exhaustive list of decision models. Julia and Laya use the same laya-style backend in llama.cpp: ModernBERT-family encoder, two decision transformer layers, type embedding and per-option MASK-marker scorer. Julia's training pipeline and exact freezing policy are not disclosed. Laya's published root architecture fully fine-tunes ModernBERT-large. Kev's small-model recipe trains LoRA and a pointer head. lev conversion supports mode A vocabulary-label readout only, not its mode B candidate-path head. Choice is evaluated in two orders and averaged. OpenJev is an independent project, not TypeSafe's hosted Jev; its card specifies decision tuning but not exactly which components received gradients. OpenJev's llama.cpp build supports a multimodal projector, even though some earlier quantized builds in its author's card are text-only. Do not generalize multilingual Laya subfolder capabilities to the English root checkpoint.\nSources: https://huggingface.co/blog/ggml-org/decision-models-in-llamacpp ; https://github.com/ggml-org/llama.cpp/pull/29818 ; https://huggingface.co/SupersonicLabs/Julia-1 ; https://huggingface.co/convaiinnovations/laya ; https://huggingface.co/interfaze-ai/lev ; https://huggingface.co/openjev/openjev .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
+      "body": "",
+      "footer": "llama.cpp: native heads | SGLang: label logits; native Kev/CLM heads not established (2 Oct).",
+      "notes": "Supported list is the October 2, 2026 release, not an exhaustive list of decision models. Julia and Laya use the same laya-style backend in llama.cpp: ModernBERT-family encoder, two decision transformer layers, type embedding and per-option MASK-marker scorer. Julia's training pipeline and exact freezing policy are not disclosed. Laya's published root architecture fully fine-tunes ModernBERT-large. Kev's small-model recipe trains LoRA and a pointer head. lev conversion supports mode A vocabulary-label readout only, not its mode B candidate-path head. Choice is evaluated in two orders and averaged. OpenJev is an independent project, not TypeSafe's hosted Jev; its card specifies decision tuning but not exactly which components received gradients. OpenJev's llama.cpp build supports a multimodal projector, even though some earlier quantized builds in its author's card are text-only. Do not generalize multilingual Laya subfolder capabilities to the English root checkpoint.\nSources: https://huggingface.co/blog/ggml-org/decision-models-in-llamacpp ; https://github.com/ggml-org/llama.cpp/pull/29818 ; https://huggingface.co/SupersonicLabs/Julia-1 ; https://huggingface.co/convaiinnovations/laya ; https://huggingface.co/interfaze-ai/lev ; https://huggingface.co/openjev/openjev .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\n\nSupplement: How llama.cpp scores decisions\nThe merged llama.cpp PR adds decision type metadata, System One prompt templates, native score readouts and calibrated output formatting. Kev conversion merges alpha/r * B@A into floating-point base weights before later quantization, and embeds the pointer head in the GGUF. Inference weights are therefore adapted even though original matrices were fixed during LoRA training. Laya/Julia output option-marker scores; Kev outputs query/key vectors and dot products; lev/OpenJev read selected vocabulary logits. Causal tasks can share prompt prefixes. Multiple questions and lev's two choice variants can require multiple evaluations: zero output tokens is not one physical forward operation per HTTP request. This endpoint is for inference and does not supply a CLM training pipeline.\nSources: https://github.com/ggml-org/llama.cpp/pull/29818 ; https://github.com/ggml-org/llama.cpp/blob/master/conversion/lev.py ; https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-decision.cpp .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\n\nSupplement: How SGLang scores decisions\nStatus checked October 2, 2026. The shipped generic API requires no new decision head: chat-template prompts with thinking disabled score single-token answer labels via the shared /v1/score path. PR #41208 merged September 25; the earlier #40992 was closed into that stack. One prompt is built per question and items are batched. The generation/scoring request uses max_new_tokens=0. Ordinary Radix caching reuses token prefixes rather than separately encoded actions. Benefit: reuse a served chat model with no head training. Costs: each new state/question still needs prompt encoding and prefill, and the documentation's validated models are large. Models named on slide were validated on one H200 in BF16; this is not proof of free-GPU fit or a head-to-head latency benchmark. Label softmax is conditional on offered labels; label_mass/x_label_mass exposes full-vocabulary mass, and confidence needs task calibration. Hybrid-attention probabilities may shift across cold/warm cache and batch composition. LoRA adapter selection through the request is refused. Native Intern-Decision 0.8B/2B/4B option-marker support in #41712 (2B unverified; prerequisite #41724), and generic image input in #41922, are open proposals, not merged capabilities. Native Kev pointer-head and CLM projection-head support is not established by these docs.\nSources: https://lmsysorg.mintlify.app/docs/supported-models/decision_models ; https://github.com/sgl-project/sglang/pull/41208 ; https://github.com/sgl-project/sglang/pull/41712 ; https://github.com/sgl-project/sglang/pull/41724 ; https://github.com/sgl-project/sglang/pull/41922 .\nThe supported-model table and SGLang status retain their October 2 source check. CLM is outside the five-model llama.cpp release. The caption below the source table was obscured by that table; its facts are retained here, and the redundant caption object is removed.\nJulia, Laya, Kev and lev: Apache 2.0. OpenJev: CC BY-NC 4.0."
     },
     {
-      "id": "decision_lab_cpp",
-      "title": "How llama.cpp scores decisions",
-      "body": "POST /v1/systemone: Choice, Score and Noul\nGGUF metadata selects the model's readout\nKev's LoRA is merged before quantization\nNo generated answer tokens to parse\nCLM needs its own serving implementation",
-      "footer": "API compatibility does not mean architectural equivalence",
-      "notes": "The merged llama.cpp PR adds decision type metadata, System One prompt templates, native score readouts and calibrated output formatting. Kev conversion merges alpha/r * B@A into floating-point base weights before later quantization, and embeds the pointer head in the GGUF. Inference weights are therefore adapted even though original matrices were fixed during LoRA training. Laya/Julia output option-marker scores; Kev outputs query/key vectors and dot products; lev/OpenJev read selected vocabulary logits. Causal tasks can share prompt prefixes. Multiple questions and lev's two choice variants can require multiple evaluations: zero output tokens is not one physical forward operation per HTTP request. This endpoint is for inference and does not supply a CLM training pipeline.\nSources: https://github.com/ggml-org/llama.cpp/pull/29818 ; https://github.com/ggml-org/llama.cpp/blob/master/conversion/lev.py ; https://github.com/ggml-org/llama.cpp/blob/master/tools/server/server-decision.cpp .\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
-    },
-    {
-      "id": "decision_lab_sglang",
-      "title": "How SGLang scores decisions",
-      "body": "/v1/decisions and /v1/systemone are merged\nChat-model label logits; no generated tokens\nOne prompt per question; normal prefix caching\nChecked: Qwen3.8-27B and Qwen3.5-35B-A3B\nNative Intern-Decision support is an open PR",
-      "footer": "Vocabulary scoring differs from Kev and CLM heads",
-      "notes": "Status checked October 2, 2026. The shipped generic API requires no new decision head: chat-template prompts with thinking disabled score single-token answer labels via the shared /v1/score path. PR #41208 merged September 25; the earlier #40992 was closed into that stack. One prompt is built per question and items are batched. The generation/scoring request uses max_new_tokens=0. Ordinary Radix caching reuses token prefixes rather than separately encoded actions. Benefit: reuse a served chat model with no head training. Costs: each new state/question still needs prompt encoding and prefill, and the documentation's validated models are large. Models named on slide were validated on one H200 in BF16; this is not proof of free-GPU fit or a head-to-head latency benchmark. Label softmax is conditional on offered labels; label_mass/x_label_mass exposes full-vocabulary mass, and confidence needs task calibration. Hybrid-attention probabilities may shift across cold/warm cache and batch composition. LoRA adapter selection through the request is refused. Native Intern-Decision 0.8B/2B/4B option-marker support in #41712 (2B unverified; prerequisite #41724), and generic image input in #41922, are open proposals, not merged capabilities. Native Kev pointer-head and CLM projection-head support is not established by these docs.\nSources: https://lmsysorg.mintlify.app/docs/supported-models/decision_models ; https://github.com/sgl-project/sglang/pull/41208 ; https://github.com/sgl-project/sglang/pull/41712 ; https://github.com/sgl-project/sglang/pull/41724 ; https://github.com/sgl-project/sglang/pull/41922 ."
-    },
-    {
-      "id": "decision_lab_benchmark",
-      "title": "A fair Kev-versus-CLM comparison",
-      "body": "Use the same boards, labels and legal actions\nTime cold and warm caches on one device\nMeasure accuracy, captures, dots and latency\nRecord training time and peak memory\nMatch backbones to isolate the architecture",
-      "footer": "Released-model comparisons also include size and data effects",
-      "notes": "A product comparison can compare actual released checkpoints, but its result combines backbone size, pretraining, decision data, objective, head and runtime. An architecture experiment should match the pretrained backbone, input budget, examples, splits, training budget and hardware, and vary joint pointer/LoRA versus frozen dual-encoder heads deliberately. Include a rule-based teacher baseline. Record encoder time separately from projection/scoring and end-to-end latency; use p50/p95 over enough repeats, cache-cold and action-cache-warm runs, identical quantization where meaningful, peak allocated memory, hardware model and checkpoint IDs. A smaller Kev may cost less at inference despite CLM's reusable actions. This is a proposed protocol, not measured results.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
-    },
-    {
-      "id": "kev_lab_02",
-      "title": "Our Kev-4B Pac-Man lab",
-      "body": "Classic maze, power pellets and four ghost AIs\nTry interactive play with the Skills adapter\nNative-engine search generates task labels\nCP1: fine-tune, evaluate and submit evidence\nKeep interactive play as a separate activity",
-      "footer": "masonicGIT/pacman 7407174; Kev 84847f0; task recipe in QPlusLearning",
-      "notes": "The lab uses Qwen/Qwen3.5-4B-Base@1001bb4d826a52d1f399e183466143f4da7b741b. Rank-16 LoRA (alpha 32) targets all supported projections, plus a 256-dimensional pointer head; the base matrices stay fixed. Interactive play initially serves the completed Skills adapter. CP1 is the only assessed checkpoint: review native-game planning labels, fine-tune from Skills, compare paired held-out boards and model rollouts, then explain and export the evidence. Interactive play remains a separate ungraded activity and can be rerun after evaluation with the task adapter. The native game is masonicGIT/pacman@7407174c1d6a38be8cd230577489e39e0873145b. It retains the classic maze, assets, four ghost personalities, release rules, speed tables, phases, power pellets and fruit. It is a faithful recreation with documented differences from the arcade ROM. Calibration remains separate. Sources: https://huggingface.co/jaredpalmer/kev-4b ; https://github.com/masonicGIT/pacman/tree/7407174c1d6a38be8cd230577489e39e0873145b ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman"
+      "id": "kev_lab_06",
+      "title": "Watch the model, then read the maths",
+      "body": "CLM animation | interactive controls\nKev: joint encoding → LoRA → pointer scores\nzj = qTkj / √256; pj = exp(zj) / Σk exp(zk)\nMaths: softmax | CLM head training | LoRA\npj compares legal options; it is not win odds",
+      "footer": "Companion lecture: animation, frozen heads, LoRA and calibration. Click the linked labels.",
+      "notes": "The game constructs caller-supplied criteria containing legal directions and their destination tiles. Kev jointly encodes state, question and options. Its head has query/key Linear projections from hidden_size to 256 and computes scaled dot products, then softmax over options. Hybrid Qwen3.5 handles each question as a causal row continuing from the shared state. This is contextual option scoring, unlike CLM's independent action encodings. Legal directions come from the maze rules. Probability reflects the offered options and is not a maze-clearing probability. The notebook serves the active Skills or Pac-Man checkpoint through /v1/systemone and connects the game via a Colab callback.\nSources: pinned Kev model.py PointerHead, rows_of and encode; lab/pacman_lab.py.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\n\nSupplement: What a probability tells us\nTemperature and confidence formulas differ across wrappers, even behind System One-compatible APIs. Fit or evaluate calibration on development data, preserve it for evaluation, and compare Brier or log loss rather than assuming one shared confidence cutoff is meaningful. A one-step teacher label is not a full-game reward target. Keep learner uncertainty discussion tied to observed paired decisions, not a guarantee of safety or optimal play.\nSources: pinned Kev api.py; pinned CLM schema.py; llama.cpp tools/server/server-decision.cpp.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/\nTeaching sequence: open the 65-second CLM animation, pause at the frozen backbone and two heads, then contrast it with Kev joint encoding and trainable encoder adapters. Use the separate HTML controls for stepping; download the HTML from Drive and open it in a browser. A PDF export is static. Reference-deck/HTML access follows the existing Drive permissions.\nKev here uses q = query_head(h_decision), k_j = option_head(h_option_j), 256-dimensional vectors and scaled dot products; its selected Choice distribution is softmax over the offered legal directions. CLM instead uses independently encoded, normalized projected vectors with a learned similarity scale. Do not describe the CLM animation as a diagram of Kev.\nLoRA: W_effective = W_base + (alpha/r)BA, r=16, alpha=32. Reference slide course_slide_44 explains the adapter identity and separately proposes a joint language/decision objective. Kev in this lab uses decision cross-entropy, not that proposed joint language objective. Raw probabilities are uncalibrated; a temperature changes probabilities but not the top-ranked move.\nCompanion links:\nlecture: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit\nanimation: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A\ninteractive_controls: https://drive.google.com/file/d/1ziqTDAN0kxP_fzGQwfJ-C6fQS2cQBcfh/view?usp=drivesdk\nfrozen_encoder: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_03#slide=id.clm_stage_03\nsimilarity: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_07#slide=id.clm_stage_07\nsoftmax: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_08#slide=id.clm_stage_08\nclm_training: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10\nlora: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44\ncalibration: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_33#slide=id.course_slide_33\nevaluation: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49",
+      "links": [
+        {
+          "element": "body",
+          "label": "CLM animation",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A"
+        },
+        {
+          "element": "body",
+          "label": "interactive controls",
+          "url": "https://drive.google.com/file/d/1ziqTDAN0kxP_fzGQwfJ-C6fQS2cQBcfh/view?usp=drivesdk"
+        },
+        {
+          "element": "body",
+          "label": "softmax",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_08#slide=id.clm_stage_08"
+        },
+        {
+          "element": "body",
+          "label": "CLM head training",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10"
+        },
+        {
+          "element": "body",
+          "label": "LoRA",
+          "occurrence": 1,
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44"
+        },
+        {
+          "element": "footer",
+          "label": "Companion lecture",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit"
+        },
+        {
+          "element": "footer",
+          "label": "calibration",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_33#slide=id.course_slide_33"
+        }
+      ],
+      "math_styles": [
+        {
+          "character_index": 82,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 109,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 89,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 100,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 168,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 115,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 122,
+          "baseline": "SUBSCRIPT"
+        },
+        {
+          "character_index": 87,
+          "baseline": "SUPERSCRIPT"
+        }
+      ]
     },
     {
       "id": "kev_lab_03",
       "title": "Our 90-minute route",
-      "body": "0-20    Compare models and try interactive play\n20-30  Review Pac-Man planning labels\n30-60  Fine-tune LoRA and the pointer head\n60-80  Evaluate the same boards and seed\n80-90  Explain and submit the checkpoint",
-      "footer": "One assessed CP1; interactive play is ungraded. General training and labels are prework.",
-      "notes": "The lab has one assessed CP1 encompassing label review, fine-tuning, paired evaluation and submission. Interactive play is a separate ungraded activity before and after training. Keep the 90-minute lab with a 30-minute fine-tuning block. Installation, model downloads, four general decision stages and offline label generation are prework. The Pac-Man stage now runs a full epoch over 4,096 task records and 2,000 decision-v7 replay records, giving 762 updates at effective batch eight. There is no automatic short-step cap. Time the full stage before class. At 1.5 seconds per update, optimizer work is about 19 minutes; at 3 seconds it is about 38 minutes, plus loading/compilation/saving. These are calculations, not measured GPU timings. Complete slower full runs as prework. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/cloud_runtime.py"
+      "body": "0–20    Compare models, animation and play\n20–30  Review Pac-Man planning labels\n30–60  Fine-tune LoRA and the pointer head\n60–80  Evaluate the same boards and seed\n80–90  Explain and submit CP1",
+      "footer": "One assessed CP1; interactive play is ungraded. Stages 1–4 and label generation are prework.",
+      "notes": "The lab has one assessed CP1 encompassing label review, fine-tuning, paired evaluation and submission. Interactive play is a separate ungraded activity before and after training. Keep the 90-minute lab with a 30-minute fine-tuning block. Installation, model downloads, four general decision stages and offline label generation are prework. The Pac-Man stage now runs a full epoch over 4,096 task records and 2,000 decision-v7 replay records, giving 762 updates at effective batch eight. There is no automatic short-step cap. Time the full stage before class. At 1.5 seconds per update, optimizer work is about 19 minutes; at 3 seconds it is about 38 minutes, plus loading/compilation/saving. These are calculations, not measured GPU timings. Complete slower full runs as prework. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/cloud_runtime.py\n\nSupplement: Our Kev-4B Pac-Man lab\nThe lab uses Qwen/Qwen3.5-4B-Base@1001bb4d826a52d1f399e183466143f4da7b741b. Rank-16 LoRA (alpha 32) targets all supported projections, plus a 256-dimensional pointer head; the base matrices stay fixed. Interactive play initially serves the completed Skills adapter. CP1 is the only assessed checkpoint: review native-game planning labels, fine-tune from Skills, compare paired held-out boards and model rollouts, then explain and export the evidence. Interactive play remains a separate ungraded activity and can be rerun after evaluation with the task adapter. The native game is masonicGIT/pacman@7407174c1d6a38be8cd230577489e39e0873145b. It retains the classic maze, assets, four ghost personalities, release rules, speed tables, phases, power pellets and fruit. It is a faithful recreation with documented differences from the arcade ROM. Calibration remains separate. Sources: https://huggingface.co/jaredpalmer/kev-4b ; https://github.com/masonicGIT/pacman/tree/7407174c1d6a38be8cd230577489e39e0873145b ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman\nUse the animation and maths links on slide 6 for optional explanation rather than repeating the full 30-slide lecture. Allow the complete task recipe to finish; longer runs are prework, not shortened for the 30-minute discussion block."
     },
     {
       "id": "kev_lab_04",
-      "title": "Colab runtime for this lab",
-      "body": "Target: RTX PRO 6000 Blackwell, 96 GB\nLocked PyTorch 2.8 / CUDA 12.8 and BF16\nRequired FLA, causal convolution, fused AdamW\nPac-Man: batch 4 × accumulation 2\nCheckpointing on; row budget 0",
-      "footer": "762 updates: 19 min at 1.5 s/update; 38 min at 3 s/update, plus setup/saves.",
-      "notes": "Require the pinned optimized stack: PyTorch 2.8.0/CUDA 12.8, Triton 3.4.0, Transformers 5.17.0, PEFT 0.21.0, FLA/fla-core 0.5.2, causal-conv1d 1.7.0, einops 0.8.1, Ninja 1.13.0. Training uses BF16 autocast over FP32 stored parameters, non-reentrant gradient checkpointing, fused AdamW, FLA gated-delta kernels and SDPA full attention. Kernel binding verification is the default; the separate actual CUDA loss/backward check is optional and may compile slowly on a fresh runtime. Pac-Man explicitly selects batch 4 x accumulation 2 and row_budget 0 after the generic profile. Earlier long-document stages retain their memory-safe execution profile. Colab allocation and compute-unit costs vary. No course-author GPU timing is claimed. Sources: https://huggingface.co/docs/transformers/en/model_doc/qwen3_5 ; https://github.com/fla-org/flash-linear-attention/releases/tag/v0.5.2 ; https://github.com/Dao-AILab/causal-conv1d/releases/tag/v1.7.0 ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/optimized_training.py"
-    },
-    {
-      "id": "kev_lab_05",
-      "title": "Interactive play with trained Kev",
-      "body": "Blinky pursues; Pinky targets ahead\nInky uses Blinky; Clyde retreats when close\nGhosts leave home through counters/timeouts\nCheck each ghost mode and simulation seconds\nVerify the active adapter in the badge",
-      "footer": "Separate, ungraded activity before or after CP1. Kev pauses simulation while deciding.",
-      "notes": "This is an ungraded activity, not an assessment checkpoint. Initially the badge identifies the completed Skills LoRA/head. CP1 evaluation leaves the task adapter serving; rerun the same play cell afterward and before export to try it. Blinky targets Pac-Man; Pinky targets four tiles ahead with the native upward overflow quirk; Inky reflects the two-tile-ahead point around Blinky, also preserving the upward quirk; Clyde targets Pac-Man when far away and its scatter corner when close. Chase/scatter turns use deterministic native targeting and tie-breaking. Frightened turns use the native RNG. Ghost-house release uses native pellet counters and inactivity timeouts: at level 1 Pinky releases first, Inky has a personal threshold of 30, Clyde 60, and a four-second no-pellet timeout can release the next waiting ghost. These are personal counters, not total board pellets. Game time pauses while the model decides, so wall-clock minutes can represent only a few simulation seconds. The UI shows simulated seconds and each ghost mode; do not force every ghost outside at the start. Sources: https://github.com/masonicGIT/pacman/blob/7407174c1d6a38be8cd230577489e39e0873145b/src/targets.js ; https://github.com/masonicGIT/pacman/blob/7407174c1d6a38be8cd230577489e39e0873145b/src/ghostReleaser.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-engine.js"
-    },
-    {
-      "id": "kev_lab_06",
-      "title": "How Kev scores a legal move",
-      "body": "Pack state, question and legal options\nRead decision-token and option-token features\nScore each option with the pointer head\nRead probabilities by direction name\nApply the move through the game code",
-      "footer": "The model chooses Pac-Man's move. Game code advances the ghosts.",
-      "notes": "The game constructs caller-supplied criteria containing legal directions and their destination tiles. Kev jointly encodes state, question and options. Its head has query/key Linear projections from hidden_size to 256 and computes scaled dot products, then softmax over options. Hybrid Qwen3.5 handles each question as a causal row continuing from the shared state. This is contextual option scoring, unlike CLM's independent action encodings. Legal directions come from the maze rules. Probability reflects the offered options and is not a maze-clearing probability. The notebook serves the active Skills or Pac-Man checkpoint through /v1/systemone and connects the game via a Colab callback.\nSources: pinned Kev model.py PointerHead, rows_of and encode; lab/pacman_lab.py.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
-    },
-    {
-      "id": "kev_lab_07",
-      "title": "What a probability tells us",
-      "body": "Select the highest-scoring legal action\nInspect competing directions\nCompare calibration on labelled examples\nConfidence is not maze success\nA legal move can still be strategically poor",
-      "footer": "Use the same actions and calibration protocol when comparing models",
-      "notes": "Temperature and confidence formulas differ across wrappers, even behind System One-compatible APIs. Fit or evaluate calibration on development data, preserve it for evaluation, and compare Brier or log loss rather than assuming one shared confidence cutoff is meaningful. A one-step teacher label is not a full-game reward target. Keep learner uncertainty discussion tied to observed paired decisions, not a guarantee of safety or optimal play.\nSources: pinned Kev api.py; pinned CLM schema.py; llama.cpp tools/server/server-decision.cpp.\n\nReference URLs checked October 2, 2026:\nhttps://github.com/jaredpalmer/kev/tree/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4\nhttps://github.com/Contrastive-LM/CLM/tree/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/src/clm/heads.py\nhttps://github.com/Contrastive-LM/CLM/blob/bb42c6c5bf914fd449bed2f6ca65be80602cb1f7/train/finetune.py\nhttps://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/kev/model.py\nhttps://huggingface.co/blog/ggml-org/decision-models-in-llamacpp\nhttps://github.com/ggml-org/llama.cpp/pull/29818\nCLM article: supplied Contrastive Language Models PDF, pages 6-8; https://contrastive-lm.notion.site/"
-    },
-    {
-      "id": "kev_lab_08",
-      "title": "Pac-Man planning data",
-      "body": "4,096 train; 256 development; 256 evaluation\nSimulate up to 20 moves in the native engine\nKeep eight paths per first legal action\nPrioritize survival, score, pellets and progress\nReview labels; keep episodes in separate splits",
-      "footer": "Approximate beam search; two RNG scenarios for frightened turns. Not globally optimal.",
-      "notes": "The committed planner dataset has 4,096 train, 256 development and 256 evaluation boards, stored in a checksum-verified compact ZIP. Collect native-game episodes with 70% planner, 20% old heuristic and 10% random legal exploration; snapshot eligible states every fourth move. Each label searches up to 20 legal player moves with beam width eight per first action. Native ghost code predicts normal chase/scatter; two independent future RNG scenarios handle frightened turns and sampled fruit duration. Optimize worst-scenario survival, then mean score, pellets, revisits, nearest-pellet distance and ghost distance. Finite horizon and pruning make this approximate planning, not globally optimal play. The teacher has current native timers/pixel offsets; the student sees board, ghost modes, history and elapsed frames. This is privileged-state imitation. Whole episodes and exact observable-state hashes are disjoint across splits; the maze is shared. Label and search metadata never enter model observations. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/planner_data.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-planner.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-manifest.json"
+      "title": "Prepare Colab before class",
+      "body": "RTX PRO 6000 Blackwell: 96 GB target\nPinned PyTorch/CUDA; BF16 autocast\nOptimized FLA, convolution and fused AdamW\nPac-Man: batch 4 × accumulation 2\nCheckpointing on; row budget 0",
+      "footer": "762 updates: ~19 min at 1.5 s/update; ~38 min at 3 s/update, plus setup/saves.",
+      "notes": "Require the pinned optimized stack: PyTorch 2.8.0/CUDA 12.8, Triton 3.4.0, Transformers 5.17.0, PEFT 0.21.0, FLA/fla-core 0.5.2, causal-conv1d 1.7.0, einops 0.8.1, Ninja 1.13.0. Training uses BF16 autocast over FP32 stored parameters, non-reentrant gradient checkpointing, fused AdamW, FLA gated-delta kernels and SDPA full attention. Kernel binding verification is the default; the separate actual CUDA loss/backward check is optional and may compile slowly on a fresh runtime. Pac-Man explicitly selects batch 4 x accumulation 2 and row_budget 0 after the generic profile. Earlier long-document stages retain their memory-safe execution profile. Colab allocation and compute-unit costs vary. No course-author GPU timing is claimed. Sources: https://huggingface.co/docs/transformers/en/model_doc/qwen3_5 ; https://github.com/fla-org/flash-linear-attention/releases/tag/v0.5.2 ; https://github.com/Dao-AILab/causal-conv1d/releases/tag/v1.7.0 ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/optimized_training.py\nTiming is arithmetic, not a measured full task run. Obtain the target GPU, download model weights and verify optimized-kernel bindings before class. A free Colab allocation does not guarantee this GPU. Reuse a completed Skills checkpoint. Drive backup is enabled in setup; details on slide 13."
     },
     {
       "id": "kev_lab_09",
-      "title": "Kev-4B training stages",
+      "title": "Five stages, five separate adapters",
       "body": "1  Decisions: 12,576 records × 2 epochs\n2  Dates/evidence: 1,425 + 2,000 replay\n3  Documents: 5,219 + 2,000 replay\n4  Skills/devtools: 11,320 + 4,000 replay\n5  Pac-Man: 4,096 + 2,000 replay; 1 epoch",
       "footer": "Pac-Man: 762 updates, lr 2e-5; prior stages and label generation are prework.",
       "notes": "General stages are separate: decision-v7 12,576 records x two epochs (3,144 updates); dates 1,425 plus 2,000 replay (429); documents 5,219 plus 2,000 replay (903); skills/devtools 11,320 plus 4,000 replay (1,915). All use effective batch eight. Initial selects 4 x 2; later long-document stages use the memory-safe 1 x 8 and row_budget 2048. The skills dataset concatenates the published hard-v1 and devtools-v1 partitions with course checksums; identity to the unavailable historical joint file is not asserted. Pac-Man is a course-specific fifth stage: warm-start completed Skills, 4,096 task records plus 2,000 decision-v7 training replay, one epoch, lr 2e-5, 4 x 2, checkpointing, row_budget 0, max_state 4096, seed 7. Same rank-16 all-projection LoRA/head architecture; task-specific zero none/distractor/none-pair augmentation, option shuffling retained. 6,096 requests give 762 updates. Sources: https://github.com/jaredpalmer/kev/blob/84847f0a883d900f7de5b7a57eaa341ca7f9a6b4/experiments/q35-4b-s23.json ; https://huggingface.co/jaredpalmer/kev-4b ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/cloud_runtime.py"
     },
     {
+      "id": "kev_lab_05",
+      "title": "Interactive play: meet the four ghosts",
+      "body": "Classic maze, assets and native game mechanics\nBlinky pursues; Pinky targets ahead\nInky uses Blinky; Clyde retreats when close\nRelease counters and modes change the threat\nBadge: Skills LoRA before; Pac-Man LoRA after",
+      "footer": "Ungraded play. Simulation pauses during inference; watch each ghost mode and simulation time.",
+      "notes": "This is an ungraded activity, not an assessment checkpoint. Initially the badge identifies the completed Skills LoRA/head. CP1 evaluation leaves the task adapter serving; rerun the same play cell afterward and before export to try it. Blinky targets Pac-Man; Pinky targets four tiles ahead with the native upward overflow quirk; Inky reflects the two-tile-ahead point around Blinky, also preserving the upward quirk; Clyde targets Pac-Man when far away and its scatter corner when close. Chase/scatter turns use deterministic native targeting and tie-breaking. Frightened turns use the native RNG. Ghost-house release uses native pellet counters and inactivity timeouts: at level 1 Pinky releases first, Inky has a personal threshold of 30, Clyde 60, and a four-second no-pellet timeout can release the next waiting ghost. These are personal counters, not total board pellets. Game time pauses while the model decides, so wall-clock minutes can represent only a few simulation seconds. The UI shows simulated seconds and each ghost mode; do not force every ghost outside at the start. Sources: https://github.com/masonicGIT/pacman/blob/7407174c1d6a38be8cd230577489e39e0873145b/src/targets.js ; https://github.com/masonicGIT/pacman/blob/7407174c1d6a38be8cd230577489e39e0873145b/src/ghostReleaser.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-engine.js\n\nSupplement: The native game and planning teacher\nThe accepted browser game is masonicGIT/pacman@7407174c1d6a38be8cd230577489e39e0873145b, replacing the earlier Jev-style maze. Archive the upstream engine, assets and GPL notices unchanged and inject the lab integration separately. Browser and CPU teacher/evaluation run the same native mechanics. The learned adapter controls Pac-Man; all four ghosts retain native personalities, timing, release and frightened behavior. Offline planner snapshots/restores the native engine, including hidden timers, and does not mutate the live episode. It resamples future RNG independently rather than reading the actual episode future. Candidate paths and labels are metadata outside the model input. The recreation has documented arcade differences. Sources: https://github.com/masonicGIT/pacman/tree/7407174c1d6a38be8cd230577489e39e0873145b ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-planner.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/vendor/arcade-pacman/source.json"
+    },
+    {
+      "id": "kev_lab_08",
+      "title": "Create labels from native game states",
+      "body": "4,096 train; 256 development; 256 evaluation\nPredict the four ghosts with native game rules\nSearch 20 moves; eight paths per first action\nRank survival, score, pellets and progress\nReview labels; separate episodes across splits",
+      "footer": "Approximate teacher; current timers are privileged. Two independent frightened-RNG scenarios.",
+      "notes": "The committed planner dataset has 4,096 train, 256 development and 256 evaluation boards, stored in a checksum-verified compact ZIP. Collect native-game episodes with 70% planner, 20% old heuristic and 10% random legal exploration; snapshot eligible states every fourth move. Each label searches up to 20 legal player moves with beam width eight per first action. Native ghost code predicts normal chase/scatter; two independent future RNG scenarios handle frightened turns and sampled fruit duration. Optimize worst-scenario survival, then mean score, pellets, revisits, nearest-pellet distance and ghost distance. Finite horizon and pruning make this approximate planning, not globally optimal play. The teacher has current native timers/pixel offsets; the student sees board, ghost modes, history and elapsed frames. This is privileged-state imitation. Whole episodes and exact observable-state hashes are disjoint across splits; the maze is shared. Label and search metadata never enter model observations. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/planner_data.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-planner.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-manifest.json"
+    },
+    {
       "id": "kev_lab_10",
       "title": "CP1: fine-tune and evaluate Pac-Man",
-      "body": "Review 4,096 planning-labelled game states\nWarm-start Skills; one epoch, 762 updates\nTrain rank-16 LoRA and 256-dim pointer head\nCompare the same 256 held-out boards\nSubmit labels, adapter, curves and comparison",
-      "footer": "30-minute class block; complete slower full runs as prework. No short-step cap.",
+      "body": "Review 4,096 planning-labelled game states\nWarm-start Skills; 2,000 decision replay records\nOne epoch: 762 updates at learning rate 2e-5\nTrain rank-16 LoRA and 256-dim pointer head\nCompare Skills and task adapters; save evidence",
+      "footer": "One CP1: review → train → evaluate → explain. Complete the full recipe without a short-step cap.",
       "notes": "CP1 includes data review, one full task training epoch, paired evaluation and evidence submission. It trains one full task epoch from the learner completed Skills checkpoint, using reviewed training labels while preserving development/evaluation splits. The exact command is printed. Output kev-4b-pacman-planner-v1 is separate from the earlier small heuristic experiment. Effective batch eight, rank-16 alpha-32 all-module LoRA, 256-dimensional head, lr 2e-5, BF16 autocast over FP32 weights, checkpointing, max_state 4096. Add 2,000 decision-v7 train replay records. Verify 6,096 accepted/seen records, no dropped/truncated records and 762 optimizer updates. Stop the serving process before training and reload afterward. Recovery saves after step 1, every 100 steps or five minutes, and at the final step. If SAVE_TO_DRIVE is enabled and mounted, each complete recovery/final checkpoint triggers a verified Drive backup. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/cloud_runtime.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/checkpoint_backup.py Evaluate the same 256 held-out boards and native model rollouts with the same seed and 128-decision cap. Record both measured results even if the task adapter does not improve. Explain a changed move or a remaining mistake, the relevant ghost behaviour, LoRA/head gradients and finite-search limitations."
     },
     {
       "id": "kev_lab_11",
-      "title": "Check what training changed",
-      "body": "Trainable: LoRA and pointer-head parameters\nOriginal base matrices remain fixed\nEncoder features change through LoRA\nTrack loss and live memory in TensorBoard\nSave recovery weights during every stage",
-      "footer": "33.8M trainable parameters; raw probabilities; calibration remains separate.",
-      "notes": "Only the 33.8M LoRA/head parameters train. Original base matrices stay fixed while gradients pass through the encoder. Optimizer steps log loss, learning rate, gradient norm, duration and live/peak allocated/reserved/free VRAM to JSONL/CSV/TensorBoard. Batch logs record shapes and source IDs. Recovery includes LoRA/head, optimizer/scheduler/RNG and counters; keep the latest two complete snapshots. Drive backup is automatic after saves when enabled, not deferred until export. Calibration is separate: raw probabilities remain uncalibrated and no release temperature is copied. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/training_monitor.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/lora_recovery.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/checkpoint_backup.py"
+      "title": "Training curves, recovery and backup",
+      "body": "33.8M trainable parameters: LoRA + head\nBase matrices stay fixed; LoRA changes features\nTensorBoard: loss, gradients, step time and VRAM\nRecovery saves optimizer, scheduler and RNG\nDrive enabled? Back up after each saved snapshot",
+      "footer": "LoRA maths | Fresh probabilities remain uncalibrated; calibration is a separate experiment.",
+      "notes": "Only the 33.8M LoRA/head parameters train. Original base matrices stay fixed while gradients pass through the encoder. Optimizer steps log loss, learning rate, gradient norm, duration and live/peak allocated/reserved/free VRAM to JSONL/CSV/TensorBoard. Batch logs record shapes and source IDs. Recovery includes LoRA/head, optimizer/scheduler/RNG and counters; keep the latest two complete snapshots. Drive backup is automatic after saves when enabled, not deferred until export. Calibration is separate: raw probabilities remain uncalibrated and no release temperature is copied. Source: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/training_monitor.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/lora_recovery.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/checkpoint_backup.py\nLoRA matrix identity in the companion lecture: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44\nContrast with frozen CLM head training: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10",
+      "links": [
+        {
+          "element": "footer",
+          "label": "LoRA maths",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44"
+        }
+      ]
     },
     {
       "id": "kev_lab_12",
-      "title": "Evaluate the fine-tuned adapter",
-      "body": "Fix Skills and planner-trained checkpoints\nScore the same 256 evaluation boards\nCompare strict and tie-aware teacher agreement\nInspect search regret and immediate captures\nSave paired predictions by board ID",
-      "footer": "Approximate teacher agreement is not full-game win rate or new-maze generalization.",
-      "notes": "Evaluate the completed Skills checkpoint and the separate planner-trained checkpoint on the same 256 held-out boards. Report strict label agreement, tie-aware agreement for equal search scores/survival, lower-search-survival choices, same-survival search regret and native immediate captures. Keep source IDs and paired predictions. These metrics measure agreement with an approximate privileged-state teacher, not full-game win rate, new-maze generalization or actual trained-model improvement before running the experiment. Sources: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/pacman_lab.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-manifest.json"
-    },
-    {
-      "id": "kev_lab_13",
-      "title": "Gameplay and compute measurements",
-      "body": "Use the same native engine and starting seed\nCompare pellets, score and repeated tiles\nVerify which LoRA is serving every decision\nRecord step time, GPU use and compute units\nInspect the five-seed CPU teacher comparison",
-      "footer": "Teacher: 225 vs 199.4 mean pellets; zero vs one clears at the 512-move cap.",
-      "notes": "Compare native 128-action Skills/fine-tuned rollouts with the same level/seed and verified active adapter. The committed five-seed teacher quality report is a rules-controller reference; it never replaces a requested model controller. The five-seed CPU planning audit uses level 1 and up to 512 actions, stopping at first life loss or clear. Mean pellets: planner 225, old heuristic 199.4; mean score: 3,590 versus 2,594; losses one versus four; clears zero versus one, with four planner turn limits. This is a small deterministic controller comparison, not a trained-Kev result or proof of optimality. It exposes remaining endgame limitations. Record measured GPU step time/utilization and Colab compute units. Sources: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-quality.json ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/planner_data.py"
+      "title": "Evaluate decisions and gameplay",
+      "body": "Skills vs Pac-Man: the same 256 held-out boards\nReport strict and tie-aware teacher agreement\nInspect search regret and immediate captures\nSame seed: compare pellets, score and revisits\nSave paired predictions, latency and GPU cost",
+      "footer": "Evaluation maths | Teacher agreement is not a full-game win rate or new-maze generalization.",
+      "notes": "Evaluate the completed Skills checkpoint and the separate planner-trained checkpoint on the same 256 held-out boards. Report strict label agreement, tie-aware agreement for equal search scores/survival, lower-search-survival choices, same-survival search regret and native immediate captures. Keep source IDs and paired predictions. These metrics measure agreement with an approximate privileged-state teacher, not full-game win rate, new-maze generalization or actual trained-model improvement before running the experiment. Sources: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/pacman_lab.py ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-manifest.json\n\nSupplement: Gameplay and compute measurements\nCompare native 128-action Skills/fine-tuned rollouts with the same level/seed and verified active adapter. The committed five-seed teacher quality report is a rules-controller reference; it never replaces a requested model controller. The five-seed CPU planning audit uses level 1 and up to 512 actions, stopping at first life loss or clear. Mean pellets: planner 225, old heuristic 199.4; mean score: 3,590 versus 2,594; losses one versus four; clears zero versus one, with four planner turn limits. This is a small deterministic controller comparison, not a trained-Kev result or proof of optimality. It exposes remaining endgame limitations. Record measured GPU step time/utilization and Colab compute units. Sources: https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/data/pacman-planner-v1-quality.json ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/planner_data.py\nCompanion evaluation chapter: https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49",
+      "links": [
+        {
+          "element": "footer",
+          "label": "Evaluation maths",
+          "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49"
+        }
+      ]
     },
     {
       "id": "kev_lab_14",
-      "title": "Checkpoint evidence and submission",
-      "body": "Explain one changed move or remaining mistake\nShow which parameters received gradients\nSave the task adapter and available prior stages\nSubmit paired predictions and training curves\nRecord runtime and actual compute-unit use",
-      "footer": "CP1 evidence: reviewed labels, Pac-Man adaptation and paired evaluation.",
+      "title": "Submit CP1: show what changed",
+      "body": "Explain a changed move or remaining mistake\nConnect the move to the ghost behaviour\nShow trainable parameters and training curves\nSave task adapter and paired evaluation results\nSubmit the notebook, runtime and compute use",
+      "footer": "CP1 evidence: reviewed labels + Pac-Man adapter + measured before/after comparison.",
       "notes": "This is the submission component of the single CP1. Submit the executed notebook, reviewed training JSONL, Pac-Man adapter/head, all available earlier stage checkpoints, configurations/metrics, paired predictions, raw logs and TensorBoard events, trainable-parameters.json, runtime-preflight.json and optimized-training-preflight.json. Explain one changed move or remaining mistake, the relevant ghost behaviour, which parameters received gradients, and the approximate search limitations. A full fresh run has five adapter/head checkpoints; a Skills-only continuation reports missing earlier archives rather than requiring retraining. Package adapters/heads rather than foundation weights or dependencies. Record compute units and elapsed GPU time. Checkpoint ownership identifies learner versus instructor. Source: course notebook submission cell."
-    },
-    {
-      "id": "kev_lab_15",
-      "title": "The native game and planning teacher",
-      "body": "Game: masonicGIT/pacman at 7407174\nOriginal maze, renderer, sounds and mechanics\nPredict each ghost with its native targeting code\nSearch uses current timers; model sees the board\nCandidate paths stay outside the model input",
-      "footer": "A faithful recreation with documented differences; source/assets and GPL notice retained.",
-      "notes": "The accepted browser game is masonicGIT/pacman@7407174c1d6a38be8cd230577489e39e0873145b, replacing the earlier Jev-style maze. Archive the upstream engine, assets and GPL notices unchanged and inject the lab integration separately. Browser and CPU teacher/evaluation run the same native mechanics. The learned adapter controls Pac-Man; all four ghosts retain native personalities, timing, release and frightened behavior. Offline planner snapshots/restores the native engine, including hidden timers, and does not mutate the live episode. It resamples future RNG independently rather than reading the actual episode future. Candidate paths and labels are metadata outside the model input. The recreation has documented arcade differences. Sources: https://github.com/masonicGIT/pacman/tree/7407174c1d6a38be8cd230577489e39e0873145b ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/games/arcade-planner.js ; https://github.com/yxc20089/QPlusLearning/tree/main/labs/lab-01-kev-pacman/vendor/arcade-pacman/source.json"
     }
   ],
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
@@ -360,5 +362,23 @@
     "interactive_play": "separate ungraded activity before and after training",
     "prework": "Stages 1–4 remain separate"
   },
-  "revision_id": "c6jJBAVj8qRJsA"
+  "companion_lecture": {
+    "presentation_id": "1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo",
+    "revision_id": "5KsymlbBib7kdw",
+    "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit",
+    "links": {
+      "lecture": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit",
+      "animation": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A",
+      "interactive_controls": "https://drive.google.com/file/d/1ziqTDAN0kxP_fzGQwfJ-C6fQS2cQBcfh/view?usp=drivesdk",
+      "frozen_encoder": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_03#slide=id.clm_stage_03",
+      "similarity": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_07#slide=id.clm_stage_07",
+      "softmax": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_08#slide=id.clm_stage_08",
+      "clm_training": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10",
+      "lora": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44",
+      "calibration": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_33#slide=id.course_slide_33",
+      "evaluation": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49"
+    },
+    "use": "Existing CLM animation, softmax/contrastive-training maths, LoRA identity and evaluation; reference deck unchanged."
+  },
+  "revision_id": "jZoNC2keBOyt4g"
 }

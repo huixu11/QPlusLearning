@@ -1,16 +1,16 @@
 {
   "presentation_id": "1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ",
   "url": "https://docs.google.com/presentation/d/1_PfmbUEH38jMO_24S_AqtUUh-IIg2LyZYkEYKjZ5uXQ/edit",
-  "slide_count": 23,
+  "slide_count": 15,
   "theme": "Kev-4B published LoRA + pointer-head curriculum, then Pac-Man adaptation",
   "duration_minutes": 90,
   "finetuning_minutes": 30,
   "state": "Native classic game and planning dataset prepared; GPU task training pending",
   "title": "Decision models for Pac-Man — Kev, CLM and the lab",
-  "revision_id": "c6jJBAVj8qRJsA",
+  "revision_id": "jZoNC2keBOyt4g",
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
   "synced_at": "2026-10-05",
-  "visual_qa": "All 23 current native PDF renders inspected; zero output issues; text/notes matched; native IDs/geometry preserved; nine lab slides and the first-slide lab note revised.",
+  "visual_qa": "All 15 final PDF renders inspected; cost table overlap and equation glyphs repaired. Native text, tables, notes, numbering and links verified; native masters/geometry preserved.",
   "initial_training_prework": true,
   "lab_route": "Initial → dates/evidence → documents → skills/devtools → Pac-Man",
   "general_stages_prework": true,
@@ -26,5 +26,23 @@
     "id": "CP1",
     "name": "Fine-tune and evaluate Kev on Pac-Man game states"
   },
-  "interactive_play": "Separate ungraded activity before and after CP1"
+  "interactive_play": "Separate ungraded activity before and after CP1",
+  "companion_lecture": {
+    "presentation_id": "1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo",
+    "revision_id": "5KsymlbBib7kdw",
+    "url": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit",
+    "links": {
+      "lecture": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit",
+      "animation": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_21A#slide=id.course_slide_21A",
+      "interactive_controls": "https://drive.google.com/file/d/1ziqTDAN0kxP_fzGQwfJ-C6fQS2cQBcfh/view?usp=drivesdk",
+      "frozen_encoder": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_03#slide=id.clm_stage_03",
+      "similarity": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_07#slide=id.clm_stage_07",
+      "softmax": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_08#slide=id.clm_stage_08",
+      "clm_training": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.clm_stage_10#slide=id.clm_stage_10",
+      "lora": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_44#slide=id.course_slide_44",
+      "calibration": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_33#slide=id.course_slide_33",
+      "evaluation": "https://docs.google.com/presentation/d/1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo/edit?slide=id.course_slide_49#slide=id.course_slide_49"
+    },
+    "use": "Existing CLM animation, softmax/contrastive-training maths, LoRA identity and evaluation; reference deck unchanged."
+  }
 }
