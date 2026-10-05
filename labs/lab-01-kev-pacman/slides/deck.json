@@ -7,10 +7,10 @@
   "finetuning_minutes": 30,
   "state": "Native classic game and planning dataset prepared; GPU task training pending",
   "title": "Decision models for Pac-Man — Kev, CLM and the lab",
-  "revision_id": "8zPKQZG1UuIOFA",
+  "revision_id": "c6jJBAVj8qRJsA",
   "runtime": "Colab, one RTX PRO 6000 Blackwell GPU",
-  "synced_at": "2026-10-03",
-  "visual_qa": "All 23 current native PDF renders inspected; zero output issues; IDs/geometry preserved; 11 lab slides and notes revised.",
+  "synced_at": "2026-10-05",
+  "visual_qa": "All 23 current native PDF renders inspected; zero output issues; text/notes matched; native IDs/geometry preserved; nine lab slides and the first-slide lab note revised.",
   "initial_training_prework": true,
   "lab_route": "Initial → dates/evidence → documents → skills/devtools → Pac-Man",
   "general_stages_prework": true,
@@ -21,5 +21,10 @@
     "replay": 2000,
     "optimizer_steps": 762,
     "teacher": "20-move native-engine beam search"
-  }
+  },
+  "assessed_checkpoint": {
+    "id": "CP1",
+    "name": "Fine-tune and evaluate Kev on Pac-Man game states"
+  },
+  "interactive_play": "Separate ungraded activity before and after CP1"
 }

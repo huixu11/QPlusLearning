@@ -1,6 +1,6 @@
 {
   "repository": "yxc20089/QPlusLearning",
-  "revision": "3d9d71c4c10797ed8cb56c42b22048eb978af306",
+  "revision": "e88bf455de872d19861586a90813640b407b9ddc",
   "files": {
     "api_client.py": "0e48a2dfb4e3bb6d07228341c08cde6c92bf25bc311c91bfcae4bcbf19a8d51e",
     "pacman_lab.py": "aaa36ffc056bb060989f50ba31ebda1a1ae04f2ad6c5d4ace0792941763b97e2",
@@ -15,7 +15,7 @@
     "games/arcade-engine.js": "3ba2e4889dc1f8ac06ae3723d7419366fa29117449e2f6388d00fc975ddffde4",
     "games/arcade-worker.js": "acd16571bd330e2dc8033ab7c59977f192ae634d1eec4291db7e16a09b730daa",
     "games/arcade-browser.js": "74d6ce446b444b983a8f259c4a3fb2afc3885fc73a2abefbcdb89975a6091396",
-    "games/arcade-shell.html": "da1eacbacdd0dd92bd3f92d31114c5a7a50b56469412a21e1bb58b8a8b01631d",
+    "games/arcade-shell.html": "b2606cdd679242c434570fd3850618041f79a8590f3b813106536c4d78341a0c",
     "vendor/arcade-pacman/source.json": "a0f21cf6009b7f7ca195fb8ce5f0730609767e7ced1c9b8cf29152f5bbe52545",
     "vendor/arcade-pacman/source.zip": "fd9ae0cbeebdfd798c609464e884f6e9c9b59673bd50083fbd0e32ea6c26a6e8",
     "planner_data.py": "9b325f71bdc08419014b6e69b1541868d483c20efaaf79964892ac3887e65ca4",

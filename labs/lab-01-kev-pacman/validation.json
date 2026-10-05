@@ -1,12 +1,12 @@
 {
-  "checked_at": "2026-10-03",
+  "checked_at": "2026-10-05",
   "cpu_tests": {
     "result": "passed",
     "count": 64,
     "scope": "Rules/data splits; 4B initial/dates/documents/skills/Pac-Man commands; TensorBoard events; subprocess failure/timeout; actual pinned loop LoRA recovery and dropout/Adam/scheduler continuation; wheel platform/hash/cache admission; captured kernel bindings; stage completion/provenance and safe restore; CUDA preflight phases/heartbeat without false zero-step status; default binding-only preparation and training admission without claiming a CUDA backward test; real CPU fused AdamW dispatch counters; probe restoration on failure; stack watchdog and cancellation; execution-change continuation in the actual pinned loop across mid-epoch, short final batches, epoch boundaries and final-step recovery; identical consumed source order, optimizer/scheduler continuation and restricted argument changes; actual notebook Stage 1 execution forces 4x2 / row budget 0 before command construction when resuming from prior execution settings; single latest/explicit checkpoint selector; a chosen older snapshot takes precedence over latest; missing, incomplete or unrelated snapshots never launch training; automatic backup after periodic recovery and final checkpoint; verified copy with retention of two archives; failed-copy preservation; restored inputs and exact dropout/optimizer/scheduler continuation after local workspace deletion; changed-label and corrupted-archive rejection; existing-local-output preservation; actual notebook fresh/resume/completed decisions and preservation of restored label bytes; missing/partial parent checkpoint prerequisites; actual failing metadata-reader subprocess stderr surfaced; explicit missing Stage 1 resume gives fresh-run instruction; missing/cached/corrupt intermediate-data admission before training launch; failed-download rejection; preserved empty unstarted output retry; recovery-directory protection; actual notebook documents-to-skills continuation from completed dates without Stage 1/2 variables or recovery, using fixture data and a mocked GPU subprocess; standalone Skills-only notebook startup with absent earlier variables, learner/instructor ownership, no training or recovery import, and partial/missing/wrong-stage rejection; actual pinned classic Pac-Man map, four ghosts, 244 pellets/four power pellets, lives/scoring, native frightened/tunnel mechanisms, all 96 seeded snapshots replayed exactly, disjoint episodes/snapshots, shared browser/CPU physics parity, controller simulation freeze while awaiting inference, stale-reset rejection, API-error pause, adapter identity trace/switch guards, live-model-card validation and requested-run fallback rejection; native planner restores private timers and episode RNG, short exhaustive search matches independent replay enumeration, gradual release puts all ghosts outside, all 4,608 task labels are legal with disjoint episodes/states and metadata excluded, task recipe uses rank-16/head-256 and explicit 4x2/replay/one epoch"
   },
   "notebook": {
-    "code_cells": 23,
+    "code_cells": 21,
     "pinned_helper_files": 21,
     "syntax": "passed",
     "source_consistency": "passed",
@@ -32,7 +32,7 @@
     "completed_dates_continuation": "passed on CPU: actual Documents/Skills/export cells, actual CloudRuntime commands and checkpoint inspection, verified fixture data, mocked GPU training and serving; absent initial archive reported, restored dates files preserved",
     "intermediate_data_preparation": "missing files prepared and pinned checksum/count verified before GPU model loading; an empty failed output is preserved for retry, nonempty output and recovery directories protected",
     "completed_skills_startup": "passed on CPU: actual startup cell with Skills-only fixture and actual learner native archive; no earlier stage variables, backup/export calls or recovery imports required; ownership and missing archives recorded; incomplete or wrong-stage checkpoint rejected; inference server mocked, no GPU load claimed",
-    "classic_pacman": "Pinned native assets/mechanics; ghost modes and simulation seconds displayed; Skills CP0 and separate planner-v1 CP3/CP4 with adapter identity verification",
+    "classic_pacman": "Pinned native assets/mechanics; ghost modes and simulation seconds displayed; separate Interactive play with Skills or Pac-Man LoRA/head identity verification; only one assessed CP1.",
     "pacman_planning": {
       "counts": {
         "train": 4096,
@@ -60,25 +60,49 @@
         "mean_same_survival_search_regret": 0.0
       },
       "gpu_task_stage": "not_run",
-      "actual_cp3_cell": "passed with actual command/evidence path and mocked GPU subprocess: fresh full recipe/count checks, completed output reused without launching another training run"
+      "actual_task_training_cell": "passed with actual command/evidence path and mocked GPU subprocess: fresh full recipe/count checks, completed output reused without launching another training run",
+      "remote_data_verification": {
+        "verified_at": "2026-10-05",
+        "previous_published_notebook": "8d416d3e36a1d4dd9efe6b88b6d2e21c34a2ec36",
+        "previous_helper_pin": "3d9d71c4c10797ed8cb56c42b22048eb978af306",
+        "archive_and_manifest": "Downloaded from GitHub and SHA-256 matched notebook pins; all three JSONL member hashes/counts matched the manifest.",
+        "training_boards": 4096,
+        "all_four_ghosts_outside_boards": 2636,
+        "frightened_boards": 1450,
+        "label_teacher": "Native ghost/game-state search, up to 20 moves; same committed dataset retained in this revision."
+      }
+    },
+    "assessment": {
+      "count": 1,
+      "id": "CP1",
+      "name": "Fine-tune and evaluate Kev on Pac-Man game states",
+      "includes": [
+        "planning data review",
+        "full 762-update task training",
+        "paired held-out evaluation and model rollouts",
+        "explanation and submission"
+      ],
+      "interactive_play": "separate ungraded activity before and after training",
+      "prework": "Stages 1–4 remain separate",
+      "structure_and_cell_syntax": "passed; callback, data review, task training, evaluation and export code retained; two standalone demonstration cells removed"
     }
   },
   "slides": {
     "count": 23,
     "visual_qa": "All 23 current native PDF renders inspected; zero output issues; text/notes readback verified and native slide/element IDs, sizes and transforms preserved",
-    "note": "Native game, ghost personalities/release and the larger planning dataset/full task recipe reflected in notebook, README, native Slides and PDF/PPTX exports.",
-    "revision_id": "8zPKQZG1UuIOFA",
-    "edited_slides": 11,
+    "note": "Single assessed CP1; interactive play retained separately; native planning data and full task recipe unchanged. Nine lab slides plus the first-slide lab note revised.",
+    "revision_id": "c6jJBAVj8qRJsA",
+    "edited_slides": 10,
     "export_method": "Authenticated Chrome native export; connector export download URI unavailable locally and unauthenticated export requires permission; sharing unchanged"
   },
   "gpu_training": "full_optimized_kev_4b_curriculum_not_run_by_course_author",
   "live_colab_callback": "not_run",
   "colab_timing": "not_measured",
   "sha256": {
-    "notebooks/pacman_kev_lab.ipynb": "a71087f1700bcc2ec49689eaaa13e1422026e6e4191580a98aa645a40680bcce",
-    "games/pacman.html": "041ac2da9fc402e55e347c5e2bc572a501dfac52ddc827aecdfcac096b777c07",
-    "slides/pacman-lab.pdf": "247ab2486d791f566ec80367ec86d95a34a28ab85b9f8cd7dc3757ae37c4462a",
-    "slides/pacman-lab.pptx": "dace41d2e807fc7b8844b68fe9d307e13e811b60b1dacfb396fbcf4c3b1c5301",
+    "notebooks/pacman_kev_lab.ipynb": "9461184f820ced47119f758131bd321dc47045758040e383398ee3f493f86d0d",
+    "games/pacman.html": "a443fa6a0c1d41ea3f391ee6e624ee4bf0ce9ce195659732b66b9db27123f8c4",
+    "slides/pacman-lab.pdf": "486ab40c6ff8a6feffd6b6944bbc591a3ef20e208ace393bf68ed6c68a6bff24",
+    "slides/pacman-lab.pptx": "5e5d22ecf6cb8277c5c104dbfbb8b97e4938c4273705f547b809dcd5973650b2",
     "data/pacman-planner-v1.zip": "a6f7e5282e888ede6a24f28cc7dffdb7d3cf51776ec5c9d6adefcf6e15e9e6a1",
     "data/pacman-planner-v1-manifest.json": "3c22ede98985264b46410dc14026eaa22301b79a3f9061cf5063c739fc39b6e2",
     "data/pacman-planner-v1-quality.json": "db6ae0d8b730c7582f3f76e0c0177061d5449cfd55bc87ae3dd4c66277d54fc0"
@@ -104,7 +128,7 @@
   "colab_tensorboard_live_ui": "not_run",
   "original_learner_run": {
     "model": "Qwen3.5-0.8B",
-    "profile": "batch 8 \u00d7 accumulation 1, missing FLA/causal convolution",
+    "profile": "batch 8 × accumulation 1, missing FLA/causal convolution",
     "status": "oom",
     "last_completed_optimizer_step": 2073,
     "total_steps": 3144,

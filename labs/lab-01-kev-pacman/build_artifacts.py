@@ -417,7 +417,7 @@ else:
 
 Use the committed planning-labelled game states to adapt your completed Skills LoRA/head, then compare the baseline and task adapter on the same held-out boards. This is the lab's only assessed checkpoint.
 
-Complete the data review, full task training and paired evaluation below. Submit the trained adapter/head, reviewed training labels, curves and `comparison.json`, with a short explanation of one changed move and one remaining mistake. Explain how the native ghost rules affect a planning label and why the search is approximate. Completion requires the full 762-update recipe, no dropped/truncated records, and recorded before/after measurements; improvement is an experimental result to measure.
+Complete the data review, full task training and paired evaluation below. Submit the trained adapter/head, reviewed training labels, curves and `comparison.json`, with a short explanation of one changed move or remaining mistake. Explain how the native ghost rules affect a planning label and why the search is approximate. Completion requires the full 762-update recipe, no dropped/truncated records, and recorded before/after measurements; improvement is an experimental result to measure.
 
 ### Inspect the planning data (20–30 minutes)
 
@@ -508,7 +508,7 @@ for name, episode in [('general', before_run), ('fine_tuned', after_run)]:
 
 ### Explain and export the checkpoint evidence (80–90 minutes)
 
-Explain one changed move and one remaining mistake. Relate a planning label to the board and ghost personalities. Identify the LoRA/head parameters that trained and the limitations of finite-horizon beam search.
+Explain one changed move or remaining mistake. Relate a planning label to the board and ghost personalities. Identify the LoRA/head parameters that trained and the limitations of finite-horizon beam search.
 
 Submit the executed notebook, reviewed training JSONL, `comparison.json`, all available small adapter/head checkpoints and stage configurations/metrics, training logs and TensorBoard events and `runtime-preflight.json`. A full fresh run produces five checkpoints. If you continued from a completed intermediate checkpoint without older archives, record those missing stages; the imported checkpoint retains its recorded parent provenance, but absent parent weights cannot be rechecked or exported. Record the Colab compute units consumed and elapsed GPU time from your session. Save outputs before the temporary runtime disconnects, then stop the server. On Colab, run the download cell.""")
     code("""runtime.stop()
