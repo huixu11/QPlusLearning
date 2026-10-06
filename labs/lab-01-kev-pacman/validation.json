@@ -89,17 +89,21 @@
   },
   "slides": {
     "count": 15,
-    "visual_qa": "All 15 final PDF renders inspected; cost table overlap and equation glyphs repaired. Native text, tables, notes, numbering and links verified; native masters/geometry preserved.",
-    "note": "Condensed 23 slides to 15. Costs, serving and evaluation details merged into retained slides/notes. Nine links to the original CLM animation, HTML controls and maths deck. Single CP1 and separate ungraded gameplay retained. No training/notebook change.",
-    "revision_id": "jZoNC2keBOyt4g",
+    "visual_qa": "All 15 PDF slides inspected; no clipping or unintended overlaps. Native image aspect ratios, GIF frame counts, links and all 15 scripts verified.",
+    "note": "Three embedded GIFs, five typeset mathematical topics with variable keys, public interactive controls and natural spoken scripts. Added verified power-pellet input explanation. Native order, CP1 and training/notebook schema retained.",
+    "revision_id": "Ptlq_fwby1RmGQ",
     "edited_slides": 15,
     "export_method": "Authenticated Chrome native export; connector export download URI unavailable locally and unauthenticated export requires permission; sharing unchanged",
-    "native_hyperlinks": 9,
+    "native_hyperlinks": 4,
     "pdf_pages": 15,
     "pptx_slides": 15,
     "output_issues": 0,
     "companion_lecture_id": "1sdnPkV6VyTW9tr6Xmtyyxns4UHlUGoTtTLj-vmxNhfo",
-    "companion_lecture_revision": "5KsymlbBib7kdw"
+    "companion_lecture_revision": "5KsymlbBib7kdw",
+    "embedded_gifs": 3,
+    "math_topics": 5,
+    "interactive_controls": "https://yxc20089.github.io/QPlusLearning/",
+    "interactive_browser_checks": "Public CLM chapter/playback; changing softmax logits; LoRA slider with fixed base; native Slides LoRA animation viewed in presentation mode."
   },
   "gpu_training": "full_optimized_kev_4b_curriculum_not_run_by_course_author",
   "live_colab_callback": "not_run",
@@ -107,8 +111,8 @@
   "sha256": {
     "notebooks/pacman_kev_lab.ipynb": "9461184f820ced47119f758131bd321dc47045758040e383398ee3f493f86d0d",
     "games/pacman.html": "a443fa6a0c1d41ea3f391ee6e624ee4bf0ce9ce195659732b66b9db27123f8c4",
-    "slides/pacman-lab.pdf": "bc32a5dc1065454a9764500a4e7de2042f2f34dbd03650fd0c866a003b5470b5",
-    "slides/pacman-lab.pptx": "555b7b70002ee57b9ed4b985677e3c7d6802bdec0cd062406d760e4f11f96ceb",
+    "slides/pacman-lab.pdf": "11590b8fde683a48971621b38bbb6312a9a9acafe27c423f8e88a4f3ae2fd880",
+    "slides/pacman-lab.pptx": "e21d7c1cd4cb50ee76c6dd9ae074ece847f8b6f22a39a77970bc0a2d5239296f",
     "data/pacman-planner-v1.zip": "a6f7e5282e888ede6a24f28cc7dffdb7d3cf51776ec5c9d6adefcf6e15e9e6a1",
     "data/pacman-planner-v1-manifest.json": "3c22ede98985264b46410dc14026eaa22301b79a3f9061cf5063c739fc39b6e2",
     "data/pacman-planner-v1-quality.json": "db6ae0d8b730c7582f3f76e0c0177061d5449cfd55bc87ae3dd4c66277d54fc0"
@@ -222,5 +226,13 @@
       }
     },
     "scope": "CPU native-controller comparison, five fixed seeds at level 1, first life or 512-decision cap. No model inference/training. Small sample; not a win-rate estimate. Planner gets higher mean score/pellets here but clears zero levels versus one for the previous heuristic."
+  },
+  "power_pellet_state_audit": {
+    "training_states": 4096,
+    "frightened_training_states": 1450,
+    "live_state_preserved": true,
+    "native_consumption_replay": "50 points, consumed tile empty, active/per-ghost frightened flags true",
+    "schema_changed": false,
+    "exact_remaining_timer_passed": false
   }
 }
