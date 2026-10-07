@@ -31,7 +31,7 @@ def source_lock(pin=False):
     return lock
 
 
-def notebook():
+def notebook(local=False):
     cells = []
     def add(kind, content):
         cell = {"id": f"cell-{len(cells):02d}", "cell_type": kind, "metadata": {}, "source": content.strip().splitlines(keepends=True)}
@@ -534,7 +534,147 @@ else:
     files.download(archive)
 """)
     result = {"cells": cells, "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}, "language_info": {"name": "python"}, "colab": {"name": "pacman_kev_lab.ipynb"}}, "nbformat": 4, "nbformat_minor": 5}
-    (ROOT / 'notebooks/pacman_kev_lab.ipynb').write_text(json.dumps(result, indent=2) + '\n')
+    if local:
+        result = local_notebook(result)
+    filename = 'pacman_kev_lab_local.ipynb' if local else 'pacman_kev_lab.ipynb'
+    (ROOT / 'notebooks' / filename).write_text(json.dumps(result, indent=2) + '\n')
+
+
+def local_notebook(result):
+    """Keep the published Colab notebook intact and generate a lab Jupyter route."""
+    cells = {cell['id']: cell for cell in result['cells']}
+
+    def replace(cell_id, old, new):
+        text = ''.join(cells[cell_id]['source'])
+        if text.count(old) != 1:
+            raise ValueError(f'Local notebook needs one {old!r} in {cell_id}')
+        cells[cell_id]['source'] = text.replace(old, new, 1).splitlines(keepends=True)
+
+    def markdown(cell_id, text):
+        cells[cell_id]['source'] = text.strip().splitlines(keepends=True)
+
+    runtime_sha = hashlib.sha256((ROOT / 'lab_runtime.py').read_bytes()).hexdigest()
+    memory_sha = hashlib.sha256((ROOT / 'lab_memory_check.py').read_bytes()).hexdigest()
+    native_sha = hashlib.sha256((ROOT / 'lab_native_kernels.py').read_bytes()).hexdigest()
+    replace('cell-03', 'import hashlib, json, os, sys\n', '''import hashlib, json, os, sys
+GPU = os.environ.get('QPLUS_GPU', '1')
+if not GPU.isdecimal():
+    raise ValueError('QPLUS_GPU must select one physical GPU index, such as 1')
+os.environ['CUDA_VISIBLE_DEVICES'] = GPU
+LAB_SOURCE = Path(os.environ.get('QPLUS_LAB_SOURCE', '/chronos_data/huixu/QPlusLearning/labs/lab-01-kev-pacman')).expanduser().resolve()
+''')
+    replace('cell-03', "LAB_DIR = Path.cwd() / 'pacman-kev-lab'", "LAB_DIR = Path(os.environ.get('QPLUS_LAB_DIR', '/chronos_data/huixu/qpluslearning-runtime-a6000')).expanduser().resolve()")
+    replace('cell-03', 'LAB_DIR.mkdir(exist_ok=True)', '''if LAB_DIR.is_relative_to(LAB_SOURCE) or LAB_SOURCE.is_relative_to(LAB_DIR):
+    raise ValueError('Use a persistent runtime directory outside the lab source directory')
+LAB_DIR.mkdir(parents=True, exist_ok=True)
+for name, folder in {'HF_HOME': 'huggingface', 'UV_CACHE_DIR': 'uv', 'UV_PYTHON_INSTALL_DIR': 'python',
+                     'PIP_CACHE_DIR': 'pip', 'TORCH_HOME': 'torch', 'TRITON_CACHE_DIR': 'triton',
+                     'CUDA_CACHE_PATH': 'cuda'}.items():
+    os.environ.setdefault(name, str(LAB_DIR / 'cache' / folder))''')
+    replace('cell-03', 'for name, expected_sha256 in FILES.items():',
+            f"LOCAL_RUNTIME_SHA256 = {runtime_sha!r}\nLOCAL_MEMORY_CHECK_SHA256 = {memory_sha!r}\nLOCAL_NATIVE_KERNELS_SHA256 = {native_sha!r}\nLOCAL_FILES = {{**FILES, 'lab_runtime.py': LOCAL_RUNTIME_SHA256, 'lab_memory_check.py': LOCAL_MEMORY_CHECK_SHA256, 'lab_native_kernels.py': LOCAL_NATIVE_KERNELS_SHA256}}\nfor name, expected_sha256 in LOCAL_FILES.items():")
+    replace('cell-03', '''    url = f'https://raw.githubusercontent.com/yxc20089/QPlusLearning/{COURSE_REVISION}/labs/lab-01-kev-pacman/{name}'
+    with urlopen(url, timeout=60) as response:
+        content = response.read()''', '''    source = LAB_SOURCE / name
+    if not source.is_file():
+        raise FileNotFoundError(f'Missing local lab helper: {source}; apply the lab changes to the checkout first')
+    content = source.read_bytes()''')
+    replace('cell-03', "print('Downloaded verified helper:', name, flush=True)",
+            "print('Copied verified local helper:', name, flush=True)")
+    replace('cell-03', "for name in ['cloud_runtime',", "for name in ['lab_memory_check', 'lab_native_kernels', 'lab_runtime', 'cloud_runtime',")
+    replace('cell-03', 'runtime = CloudRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)', '''from lab_runtime import LabRuntime
+runtime = LabRuntime(LAB_DIR, training_profile=TRAINING_PROFILE)
+print('Jupyter Python:', sys.executable)
+print('Training Python:', runtime.python)
+print('Physical GPU:', GPU)''')
+    replace('cell-03', '# Later stages; Stage 1 explicitly selects 4 x 2 below',
+            '# Lab execution: batch 1 x accumulation 8, row_budget 2048')
+    replace('cell-05', 'SHOW_TENSORBOARD = True',
+            'SHOW_TENSORBOARD = False  # Run TensorBoard in a lab terminal and forward port 6006')
+    replace('cell-08', 'RUN_TRAINING_PREFLIGHT = False', 'RUN_TRAINING_PREFLIGHT = True')
+    replace('cell-08', '# Optional extra model checks; optimized bindings remain required',
+            '# Required kernel smoke check; each stage also tests long samples before full training.')
+    replace('cell-10', 'DRIVE_BACKUP_ROOT = None',
+            "DRIVE_BACKUP_ROOT = Path(os.environ.get('QPLUS_BACKUP_DIR', str(LAB_DIR / 'backups')))")
+    replace('cell-10', "print('Automatic Drive backup:'", "print('Automatic lab archive backup:'")
+    replace('cell-10', 'Stage 1 selects batch 4 x accumulation 2 / row_budget 0',
+            'Stage 1 selects batch 1 x accumulation 8 / row_budget 2048')
+    replace('cell-15', "INITIAL_EXECUTION = {'batch': 4, 'accum': 2, 'row_budget': 0}  # Explicit published initial execution",
+            "INITIAL_EXECUTION = {'batch': 1, 'accum': 8, 'row_budget': 2048}  # A6000 execution; effective batch remains eight")
+    replace('cell-36', "print('Pac-Man recipe:', RECIPE)",
+            "PACMAN_RECIPE = runtime.selected_pacman_recipe(RECIPE)\nprint('Pac-Man recipe and lab execution:', PACMAN_RECIPE)")
+    replace('cell-36', 'for key, value in RECIPE.items():', 'for key, value in PACMAN_RECIPE.items():')
+    replace('cell-38', "comparison['pacman_dataset'] = manifest", '''comparison['pacman_dataset'] = manifest
+comparison['lab_execution'] = {'initial': runtime.initial_execution, 'pacman': PACMAN_RECIPE,
+                               'physical_gpu': GPU, 'training_python': str(runtime.python)}''')
+    replace('cell-38', "comparison['lab_execution'] =", "comparison['lab_memory_preflights'] = runtime.memory_preflights\ncomparison['lab_execution'] =")
+    replace('cell-38', "comparison['lab_execution'] =", "comparison['lab_native_kernels'] = runtime.native_training_kernels\ncomparison['lab_execution'] =")
+    replace('cell-40', "LAB_DIR/'runtime-preflight.json',", "LAB_DIR/'runtime-preflight.json', LAB_DIR/'lab-native-kernels.json',")
+
+    markdown('cell-02', '''## 实验室普通 Jupyter：先准备运行环境
+
+从你的本地电脑 SSH 登录实验室，按照 [LAB_SETUP.md](../LAB_SETUP.md) 创建 Python 3.13 Conda 环境 `/chronos_data/conda_envs/qplus-jupyter-py313`，选择 **QPlusLearning (A6000, Python 3.13)** kernel。
+
+本 notebook 默认使用物理 GPU 1、源码 `/chronos_data/huixu/QPlusLearning/labs/lab-01-kev-pacman` 和持久目录 `/chronos_data/huixu/qpluslearning-runtime-a6000`。运行前可设置 `QPLUS_GPU`、`QPLUS_LAB_SOURCE`、`QPLUS_LAB_DIR`。GPU 必须在第一次 CUDA 初始化之前选择；换卡时重启 kernel。
+
+Jupyter 与训练器使用独立环境。`runtime.setup()` 会在 `/chronos_data/conda_envs/qplus-kev-training-py313` 建立 uv 环境（可用 `QPLUS_TRAINING_ENV` 指定），按 Kev 上游 lockfile 安装 Python 3.13 / Torch 2.8.0 / CUDA 12.8，再校验 GPU/BF16、CUDA backward 和优化内核。不要把训练环境指向 Jupyter Conda 环境，也不需要在 kernel 中手动安装 Torch。
+
+本地编译优先复用上面已有的 Jupyter Conda 环境里的 CUDA 12.8 `nvcc` 和开发头文件；不新建第三个 CUDA toolkit 环境。`QPLUS_CUDA_HOME` 可指定已有的其他 CUDA 12.8 toolkit。`nvidia-smi` 显示 CUDA 12.8 不能证明 `nvcc` 已安装；开发工具只在原 wheel 与系统 GLIBC 不兼容、必须本地编译时使用。
+
+按你提供的当前运行约 20 GB 显存占用，单张约 48 GB 的 A6000 足够，本 notebook 默认仅使用 GPU 1。这个占用由你提供，并非本次修改的 GPU 实测结果；不同阶段的占用以各自显存报告为准。所有阶段使用 batch 1 × accumulation 8、row_budget 2048，保持有效 batch 八，每阶段开始前保留长样本显存检查。历史 reference 路径的约 90 GiB OOM 记录不作为当前运行的显存需求；本版本要求 FLA/causal-conv1d 优化内核。''')
+    markdown('cell-04', '''## 训练曲线
+
+启动单元格从本地 checkout 复制并校验 21 个课程 helper/数据/游戏文件及三个本地运行 helper（`lab_runtime.py`、`lab_memory_check.py`、`lab_native_kernels.py`），保留已有数据、checkpoint 和日志。原课程 commit、模型 revision、数据和内核 SHA-256 保持固定。训练安装仍需要联网下载 Kev、锁定依赖、模型权重和训练数据。
+
+在实验室终端运行 TensorBoard，并从本地 SSH 转发 6006：
+
+```bash
+conda activate /chronos_data/conda_envs/qplus-jupyter-py313
+tensorboard --logdir /chronos_data/huixu/qpluslearning-runtime-a6000/logs --host 127.0.0.1 --port 6006
+```
+
+`logs/<stage>/<attempt>` 保存每步 CE、学习率、梯度、耗时、显存、TensorBoard events，以及原始日志和失败批次形状。''')
+    markdown('cell-07', '''## 校验锁定的优化训练环境
+
+训练使用 Python 3.13、Torch 2.8.0/CUDA 12.8、Triton 3.4.0、Transformers 5.17.0 和锁定 PEFT。FLA/fla-core 0.5.2、causal-conv1d 1.7.0、einops 0.8.1、Ninja 1.13.0 的 wheel 均校验 SHA-256，并用 `--no-deps` 安装。CUDA convolution wheel 要求 Linux x86_64、Python 3.13 和 CXX11 ABI。
+
+若原 causal-conv1d wheel 导入失败，且诊断明确是系统缺少它要求的 GLIBC 版本，`lab_native_kernels.py` 才用 SHA-256 固定的官方 1.7.0 源码和已有 CUDA 12.8 `nvcc` 本地编译，默认两条编译任务。它在独立训练环境中安装并重新验证 convolution/FLA bindings；保留 Torch 锁定版本、系统 GLIBC、原 wheel checksum 和源码 license。其他导入错误会保留原诊断并停止，不会触发这种重编译。`lab-native-kernels.json` 记录使用原 wheel 还是已验证的本地构建；本地 wheel 按工具链指纹和 checksum 缓存复用。
+
+下方必须保持 `RUN_TRAINING_PREFLIGHT=True`：下载并审计实际 4B 基座后，在 A6000 上用两条真实记录检查 loss、backward、有限 LoRA/head 梯度和 fused AdamW/FLA/convolution 调用。20 分钟是 timeout，不是预计耗时。
+
+开始各阶段完整训练前，另用该阶段实际参数和训练数据扫描 tokenized forward-pass 形状，选择观测到最昂贵的样本，并考虑符合条件的 none-pair siblings。临时模型连续累积八个 microbatch 后更新，重复两次，记录 allocated/reserved 峰值和实际 pass 形状；这不是正式 checkpoint。`logs/<stage>/memory-check-*/memory-preflight.json` 保存检查结果。检查 timeout 为一小时，不是预计耗时。失败不开始完整阶段；通过也不能保证整个阶段所有形状和后续共享 GPU 占用都能适配。''')
+    markdown('cell-09', '''## 持久存储与恢复
+
+实验室 execution 使用 batch 1 × accumulation 8、gradient checkpointing 和 row_budget 2048；保留原模型、数据、epochs、有效 batch 八和 optimizer-step 数。分组、dropout 与优化内核会改变数值轨迹。长于 row budget 的单个问题仍完整运行，不会静默截断。
+
+`SAVE_TO_DRIVE=False`；默认把验证过的恢复 ZIP 保存到 `LAB_DIR/backups`（可用 `QPLUS_BACKUP_DIR` 指定）。这不依赖 Google Drive，同盘副本不能代替异地备份。保留 step 1、每 100 步/五分钟、最终步的完整 LoRA/head、optimizer、scheduler、RNG 和输入数据。checkpoint 与 recovery 路径保持固定；已有文件不会作为新训练被删除。完整输出直接复用，部分输出从恢复快照继续。
+
+Stage 1 支持显式改变 batch/accum/row_budget 的恢复；其他阶段恢复要求原参数一致。每次训练仍有 180 分钟 attempt cap，超时后保留恢复结果；这不是整个阶段的预计耗时。''')
+    markdown('cell-14', '''## Stage 1：初始决策训练
+
+使用固定 Qwen3.5-4B-Base 和完整 decision-v7 train，训练两个 epochs。实验室单元格明确选择 `INITIAL_EXECUTION={'batch':1,'accum':8,'row_budget':2048}`。默认有完整快照时恢复，没有快照时新建；完整 checkpoint 复用。`RESUME_CHECKPOINT='latest'` 或完整快照路径可以明确要求恢复，缺失时停止，避免无意从头训练。''')
+    markdown('cell-28', '''## 加载已完成的 Skills checkpoint
+
+在新 kernel 中先运行启动、`runtime.setup()`、优化环境准备和存储单元格。如果没有完整 Skills checkpoint，按顺序完成 Stage 1–4；下载基座不会产生已训练的 Skills adapter。
+
+如果已有完整 Skills checkpoint，将 native 文件放在 `LAB_DIR/checkpoints/kev-4b-skills`，或恢复完整自动备份。下方单元格检查 stage、文件和完整步数，加载训练过的 LoRA/head，并明确报告缺失的早期阶段 archive。保留 learner/instructor ownership。''')
+    markdown('cell-31', '''## 可选的交互游戏
+
+原 Kev 浏览器控制使用 Colab kernel callback；普通 Jupyter 中下方单元格会提示跳过，不影响后续真实模型的结构化评估和 rollout。该单元格不会用规则控制器伪装成模型推理。''')
+    markdown('cell-35', '''## CP1：训练 Pac-Man adapter
+
+完整训练 4,096 planning-labelled boards 加 2,000 decision-v7 replay，one epoch、lr 2e-5、rank-16 LoRA、head-256、max_state 4096，共 **762 optimizer updates**。
+
+实验室 execution 明确使用 batch 1 × accumulation 8、row_budget 2048。打印的命令、保存的 training_config、下面的 recipe 一致性检查和最终 evidence 使用同一选择。数据 manifest 保留课程发布 recipe，实际 lab execution 另外记录，不改源数据或删除断言。开始训练前释放推理模型显存；已有 recovery 必须匹配本次参数。''')
+    markdown('cell-39', '''## 保存实验室运行结果
+
+导出包含实际评估、已审阅标签、可用的 adapter/head、配置、运行 receipts、训练日志和 TensorBoard events。基础模型和包不进入 submission ZIP。缺少的早期阶段 archive 会明确列出。导出单元格打印本地文件路径；从你本地电脑通过 scp 下载，保留真实 GPU 型号、显存和耗时记录。''')
+    replace('cell-00', 'The target runtime is **Colab with one NVIDIA RTX PRO 6000 Blackwell GPU**. The full Server Edition has 96 GB VRAM. Check the actual allocation in the prework cell. The notebook uses BF16 inference and training autocast, with FP32 stored backbone, adapter and head parameters in the initial recipe. Colab does not guarantee this GPU, including on paid plans. Arrange access before class and record actual runtime cost. All stages still need an instructor GPU preflight.',
+            'This notebook runs in **ordinary Jupyter on one laboratory RTX A6000**. The user reports about 20 GB of VRAM use for the current run, which fits one 48 GB card. It uses a separate locked Python 3.13 training environment. BF16 and optimized CUDA kernels remain required. Stage memory checks record the actual usage; this change has been checked on CPU and has not been run on the lab GPU by the author.')
+    result['metadata'].pop('colab', None)
+    result['metadata']['kernelspec'] = {'display_name': 'QPlusLearning (A6000, Python 3.13)',
+                                      'language': 'python', 'name': 'qplus-a6000-py313'}
+    return result
 
 
 
@@ -551,5 +691,6 @@ if __name__ == '__main__':
     if args.pin_source:
         source_lock(pin=True)
     notebook()
+    notebook(local=True)
     game()
-    print('Built Lab 1 notebook and Pac-Man browser game.')
+    print('Built Colab and laboratory notebooks and the Pac-Man browser game.')

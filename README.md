@@ -13,3 +13,5 @@ Lab 1 includes a notebook with separate initial, intermediate and domain trainin
 The lab targets Colab with an NVIDIA RTX PRO 6000 Blackwell GPU. Arrange access before class; that allocation is not guaranteed or assumed free. CPU and game checks are included. The original batch-8 initial run OOMed on a learner's 94.97 GiB GPU. The optimized 4B kernel preflight, full memory profile, CUDA recovery, timing and live Colab callback still require a validation run; see [setup](labs/lab-01-kev-pacman/COLAB_SETUP.md).
 
 Course code and content use the [MIT license](LICENSE), with third-party materials covered by their [original licenses](labs/lab-01-kev-pacman/vendor/README.md).
+
+For an ordinary Jupyter installation on the lab's RTX A6000, use the [local notebook](labs/lab-01-kev-pacman/notebooks/pacman_kev_lab_local.ipynb) and [lab setup instructions](labs/lab-01-kev-pacman/LAB_SETUP.md). Its Jupyter Conda environment and independently locked Python 3.13 training environment live under `/chronos_data/conda_envs`; single-GPU training uses memory-conscious execution while preserving the curriculum and upstream pins.
